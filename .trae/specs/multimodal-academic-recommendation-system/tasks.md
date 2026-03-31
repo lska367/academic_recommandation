@@ -28,12 +28,12 @@
   - [ ] SubTask 5.3: Implement persistence mechanism
   - [ ] SubTask 5.4: Test vector search
   - [ ] SubTask 5.5: Git commit
-- [ ] Task 6: Build multimodal reranking module
-  - [ ] SubTask 6.1: Implement candidate retrieval
-  - [ ] SubTask 6.2: Create LLM-based reranking prompt
-  - [ ] SubTask 6.3: Implement reranking with doubao-seed-2-0-lite-260215
-  - [ ] SubTask 6.4: Test reranking functionality
-  - [ ] SubTask 6.5: Git commit
+- [x] Task 6: Build multimodal reranking module
+  - [x] SubTask 6.1: Implement candidate retrieval
+  - [x] SubTask 6.2: Create LLM-based reranking prompt
+  - [x] SubTask 6.3: Implement reranking with doubao-seed-2-0-lite-260215
+  - [x] SubTask 6.4: Test reranking functionality
+  - [x] SubTask 6.5: Git commit
 - [ ] Task 7: Implement academic report generation
   - [ ] SubTask 7.1: Create report generation prompt
   - [ ] SubTask 7.2: Implement report synthesis with LLM

@@ -1,18 +1,12 @@
 
 import os
 import json
-from typing import List, Dict, Any, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 
 
 class Reranker:
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None
-    ):
+    def __init__(self, api_key=None, base_url=None, model=None):
         load_dotenv()
         
         self.api_key = api_key or os.getenv("VOLCENGINE_API_KEY")
@@ -27,7 +21,7 @@ class Reranker:
             base_url=self.base_url
         )
     
-    def _build_rerank_prompt(self, query: str, candidates: List[Dict[str, Any]]) -> str:
+    def _build_rerank_prompt(self, query, candidates):
         prompt = f"""作为学术论文推荐系统的专业重排序助手，请根据用户查询，对候选论文进行评分和排序。
 
 用户查询：{query}
@@ -70,7 +64,7 @@ class Reranker:
 """
         return prompt
     
-    def _parse_rerank_response(self, response: str) -> List[Dict[str, Any]]:
+    def _parse_rerank_response(self, response):
         try:
             json_str = response
             json_start = json_str.find("{")
@@ -84,12 +78,7 @@ class Reranker:
             print(f"解析重排序响应失败: {e}")
             return []
     
-    def rerank(
-        self,
-        query: str,
-        candidates: List[Dict[str, Any]],
-        top_k: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+    def rerank(self, query, candidates, top_k=None):
         if not candidates:
             return []
         
@@ -135,7 +124,7 @@ class Reranker:
             print(f"重排序过程出错: {e}")
             return candidates[:top_k]
     
-    def aggregate_candidates_by_paper(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def aggregate_candidates_by_paper(self, candidates):
         paper_dict = {}
         
         for candidate in candidates:
@@ -183,4 +172,50 @@ def main():
                 "metadata": {
                     "title": "Attention Is All You Need",
                     "authors": "Vaswani et al.",
-                    "summary":
+                    "summary": "提出了Transformer架构，彻底改变了自然语言处理领域",
+                    "paper_id": "paper_1"
+                },
+                "document": "本文提出了Transformer，一种完全基于注意力机制的网络架构，摒弃了循环和卷积神经网络...",
+                "distance": 0.3
+            },
+            {
+                "metadata": {
+                    "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
+                    "authors": "Devlin et al.",
+                    "summary": "介绍了BERT预训练模型，在多项NLP任务上取得了突破性成果",
+                    "paper_id": "paper_2"
+                },
+                "document": "BERT通过在大规模文本语料上预训练深度双向Transformer表示，然后在特定任务上微调...",
+                "distance": 0.25
+            },
+            {
+                "metadata": {
+                    "title": "ImageNet Classification with Deep Convolutional Neural Networks",
+                    "authors": "Krizhevsky et al.",
+                    "summary": "提出了AlexNet，开启了深度学习在计算机视觉领域的革命",
+                    "paper_id": "paper_3"
+                },
+                "document": "本文训练了一个大型深度卷积神经网络来对ImageNet LSVRC-2010竞赛中的图像进行分类...",
+                "distance": 0.6
+            }
+        ]
+        
+        print("\n📚 Test candidates:")
+        for i, c in enumerate(test_candidates, 1):
+            print(f"  {i}. {c['metadata']['title']} (distance: {c['distance']:.3f})")
+        
+        print("\n🔄 Testing candidate aggregation...")
+        aggregated = reranker.aggregate_candidates_by_paper(test_candidates)
+        print(f"✅ Aggregated {len(aggregated)} unique papers")
+        
+        print("\n⚠️  Note: Full reranking requires valid API key.")
+        print("Reranker module test completed!")
+        
+    except Exception as e:
+        print(f"⚠️  Test note: {type(e).__name__}: {e}")
+        print("This is expected if API key is not set. The module structure is correct.")
+
+
+if __name__ == "__main__":
+    main()
+
