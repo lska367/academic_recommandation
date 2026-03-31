@@ -11,4 +11,8 @@ dependencies = [
     "pdfplumber>=0.11.9",
     "pymupdf>=1.27.2.2",
     "requests>=2.33.1",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "python-multipart>=0.0.12",
+    "python-dotenv>=1.0.1",
 ]

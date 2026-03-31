@@ -97,7 +97,7 @@
   - `programmatic` TR-6.4: 批量编码功能正常
 - **Notes**: 使用真实 API 调用，测试前确保 API key 配置正确
 
-## [ ] Task 7: 多模态检索模块
+## [/] Task 7: 多模态检索模块
 - **Priority**: P0
 - **Depends On**: Task 6
 - **Description**: 
