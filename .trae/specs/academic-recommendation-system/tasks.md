@@ -1,7 +1,7 @@
 
 # 基于多模态重排的学术内容推荐系统 - The Implementation Plan (Decomposed and Prioritized Task List)
 
-## [ ] Task 1: 项目初始化和环境配置
+## [x] Task 1: 项目初始化和环境配置
 - **Priority**: P0
 - **Depends On**: None
 - **Description**: 
@@ -64,7 +64,7 @@
   - `programmatic` TR-4.3: 切片元数据完整
 - **Notes**: 切片大小要适合 embedding 模型输入
 
-## [ ] Task 5: 向量数据库集成
+## [x] Task 5: 向量数据库集成
 - **Priority**: P0
 - **Depends On**: Task 4
 - **Description**: 
@@ -80,7 +80,7 @@
   - `programmatic` TR-5.4: 重启后数据仍然可用
 - **Notes**: 使用 ChromaDB，易于集成且支持持久化
 
-## [ ] Task 6: 多模态 Embedding 编码模块
+## [x] Task 6: 多模态 Embedding 编码模块
 - **Priority**: P0
 - **Depends On**: Task 5
 - **Description**: 
