@@ -1,0 +1,75 @@
+# Tasks
+- [ ] Task 1: Initialize project structure with uv and git
+  - [ ] SubTask 1.1: Set up uv Python environment
+  - [ ] SubTask 1.2: Create project directory structure
+  - [ ] SubTask 1.3: Create .gitignore
+  - [ ] SubTask 1.4: First git commit
+- [ ] Task 2: Implement arXiv paper crawler
+  - [ ] SubTask 2.1: Create arXiv API client
+  - [ ] SubTask 2.2: Implement paper metadata fetching
+  - [ ] SubTask 2.3: Implement PDF download functionality
+  - [ ] SubTask 2.4: Test crawler with real arXiv data
+  - [ ] SubTask 2.5: Git commit
+- [ ] Task 3: Build PDF processing pipeline
+  - [ ] SubTask 3.1: Implement PDF text extraction
+  - [ ] SubTask 3.2: Implement PDF image/figure extraction
+  - [ ] SubTask 3.3: Create content chunking logic
+  - [ ] SubTask 3.4: Test PDF processing with downloaded papers
+  - [ ] SubTask 3.5: Git commit
+- [ ] Task 4: Implement multimodal embedding module
+  - [ ] SubTask 4.1: Set up OpenAI client for Volcengine ARK
+  - [ ] SubTask 4.2: Implement text embedding with doubao-embedding-vision-250615
+  - [ ] SubTask 4.3: Implement image embedding with doubao-embedding-vision-250615
+  - [ ] SubTask 4.4: Test embedding generation
+  - [ ] SubTask 4.5: Git commit
+- [ ] Task 5: Set up persistent vector store
+  - [ ] SubTask 5.1: Choose and integrate vector database
+  - [ ] SubTask 5.2: Implement vector storage and retrieval
+  - [ ] SubTask 5.3: Implement persistence mechanism
+  - [ ] SubTask 5.4: Test vector search
+  - [ ] SubTask 5.5: Git commit
+- [ ] Task 6: Build multimodal reranking module
+  - [ ] SubTask 6.1: Implement candidate retrieval
+  - [ ] SubTask 6.2: Create LLM-based reranking prompt
+  - [ ] SubTask 6.3: Implement reranking with doubao-seed-2-0-lite-260215
+  - [ ] SubTask 6.4: Test reranking functionality
+  - [ ] SubTask 6.5: Git commit
+- [ ] Task 7: Implement academic report generation
+  - [ ] SubTask 7.1: Create report generation prompt
+  - [ ] SubTask 7.2: Implement report synthesis with LLM
+  - [ ] SubTask 7.3: Add citation handling
+  - [ ] SubTask 7.4: Test report generation
+  - [ ] SubTask 7.5: Git commit
+- [ ] Task 8: Build backend API
+  - [ ] SubTask 8.1: Set up FastAPI backend
+  - [ ] SubTask 8.2: Implement conversation endpoint
+  - [ ] SubTask 8.3: Implement paper recommendation endpoint
+  - [ ] SubTask 8.4: Implement report generation endpoint
+  - [ ] SubTask 8.5: Add automatic startup data check
+  - [ ] SubTask 8.6: Test backend API
+  - [ ] SubTask 8.7: Git commit
+- [ ] Task 9: Create React frontend
+  - [ ] SubTask 9.1: Set up React project with Vite
+  - [ ] SubTask 9.2: Implement conversational UI
+  - [ ] SubTask 9.3: Add paper recommendation display
+  - [ ] SubTask 9.4: Implement academic report view
+  - [ ] SubTask 9.5: Style frontend for good UX
+  - [ ] SubTask 9.6: Test frontend
+  - [ ] SubTask 9.7: Git commit
+- [ ] Task 10: Integration and final testing
+  - [ ] SubTask 10.1: Integrate frontend and backend
+  - [ ] SubTask 10.2: Run full system test
+  - [ ] SubTask 10.3: Clean up test files
+  - [ ] SubTask 10.4: Start complete system
+  - [ ] SubTask 10.5: Final git commit
+
+# Task Dependencies
+- Task 2 depends on Task 1
+- Task 3 depends on Task 2
+- Task 4 depends on Task 3
+- Task 5 depends on Task 4
+- Task 6 depends on Task 5
+- Task 7 depends on Task 6
+- Task 8 depends on Task 7
+- Task 9 can be parallel with Task 8
+- Task 10 depends on Task 8 and Task 9

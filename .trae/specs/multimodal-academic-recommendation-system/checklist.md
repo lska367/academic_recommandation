@@ -1,0 +1,18 @@
+- [ ] uv environment initialized and dependencies installed
+- [ ] Project directory structure created
+- [ ] .gitignore file created with appropriate exclusions
+- [ ] arXiv crawler implemented and can fetch real papers
+- [ ] At least 50 papers downloaded and stored
+- [ ] PDF processing pipeline extracts text and images
+- [ ] Content chunking works correctly
+- [ ] Multimodal embedding with doubao-embedding-vision-250615 works
+- [ ] Vector store with persistence implemented
+- [ ] Reranking module using doubao-seed-2-0-lite-260215 implemented
+- [ ] Academic report generation works
+- [ ] FastAPI backend with all endpoints implemented
+- [ ] Automatic data check on startup implemented
+- [ ] React frontend with conversational UI created
+- [ ] Frontend and backend integrated
+- [ ] Full system test passes
+- [ ] Test files cleaned up
+- [ ] System starts successfully
