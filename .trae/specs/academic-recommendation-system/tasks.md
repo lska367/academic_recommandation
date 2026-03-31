@@ -97,7 +97,7 @@
   - `programmatic` TR-6.4: 批量编码功能正常
 - **Notes**: 使用真实 API 调用，测试前确保 API key 配置正确
 
-## [/] Task 7: 多模态检索模块
+## [x] Task 7: 多模态检索模块
 - **Priority**: P0
 - **Depends On**: Task 6
 - **Description**: 
@@ -113,7 +113,7 @@
   - `programmatic` TR-7.3: 检索结果包含完整信息
 - **Notes**: 检索结果需要关联论文元数据
 
-## [ ] Task 8: 多模态重排序模块
+## [x] Task 8: 多模态重排序模块
 - **Priority**: P1
 - **Depends On**: Task 7
 - **Description**: 
@@ -129,7 +129,7 @@
   - `programmatic` TR-8.3: 论文按分数正确排序
 - **Notes**: 重排序是提升推荐质量的关键
 
-## [ ] Task 9: 学术综述生成模块
+## [x] Task 9: 学术综述生成模块
 - **Priority**: P1
 - **Depends On**: Task 8
 - **Description**: 
@@ -146,7 +146,7 @@
   - `programmatic` TR-9.4: 报告成功保存
 - **Notes**: 综述需要整合多篇论文内容
 
-## [ ] Task 10: 后端 API 服务
+## [x] Task 10: 后端 API 服务
 - **Priority**: P1
 - **Depends On**: Task 9
 - **Description**: 
@@ -164,7 +164,7 @@
   - `programmatic` TR-10.4: CORS 配置正确
 - **Notes**: API 设计要 RESTful
 
-## [ ] Task 11: React 前端项目初始化
+## [/] Task 11: React 前端项目初始化
 - **Priority**: P1
 - **Depends On**: Task 10
 - **Description**: 
@@ -180,7 +180,7 @@
   - `programmatic` TR-11.3: Tailwind CSS 配置正确
 - **Notes**: 遵循 Vercel React 最佳实践
 
-## [ ] Task 12: 对话界面组件
+## [/] Task 12: 对话界面组件
 - **Priority**: P1
 - **Depends On**: Task 11
 - **Description**: 
@@ -196,7 +196,7 @@
   - `human-judgement` TR-12.3: 界面美观合理
 - **Notes**: 注重用户体验
 
-## [ ] Task 13: 前端与后端集成
+## [/] Task 13: 前端与后端集成
 - **Priority**: P1
 - **Depends On**: Task 12
 - **Description**: 
