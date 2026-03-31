@@ -17,7 +17,7 @@
   - `programmatic` TR-1.3: git 仓库初始化成功
 - **Notes**: 使用 uv 进行依赖管理，遵循 Python 项目最佳实践
 
-## [ ] Task 2: arXiv 论文爬虫实现
+## [x] Task 2: arXiv 论文爬虫实现
 - **Priority**: P0
 - **Depends On**: Task 1
 - **Description**: 

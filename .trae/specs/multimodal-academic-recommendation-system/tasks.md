@@ -1,9 +1,9 @@
 # Tasks
-- [ ] Task 1: Initialize project structure with uv and git
-  - [ ] SubTask 1.1: Set up uv Python environment
-  - [ ] SubTask 1.2: Create project directory structure
-  - [ ] SubTask 1.3: Create .gitignore
-  - [ ] SubTask 1.4: First git commit
+- [x] Task 1: Initialize project structure with uv and git
+  - [x] SubTask 1.1: Set up uv Python environment
+  - [x] SubTask 1.2: Create project directory structure
+  - [x] SubTask 1.3: Create .gitignore
+  - [x] SubTask 1.4: First git commit
 - [ ] Task 2: Implement arXiv paper crawler
   - [ ] SubTask 2.1: Create arXiv API client
   - [ ] SubTask 2.2: Implement paper metadata fetching
