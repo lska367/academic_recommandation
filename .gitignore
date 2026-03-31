@@ -36,6 +36,8 @@ wheels/
 # Data
 data/
 *.pdf
+test_chroma_db/
+chroma_db/
 
 # Node
 node_modules/
