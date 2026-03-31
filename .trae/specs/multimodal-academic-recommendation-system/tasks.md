@@ -16,12 +16,12 @@
   - [ ] SubTask 3.3: Create content chunking logic
   - [ ] SubTask 3.4: Test PDF processing with downloaded papers
   - [ ] SubTask 3.5: Git commit
-- [ ] Task 4: Implement multimodal embedding module
-  - [ ] SubTask 4.1: Set up OpenAI client for Volcengine ARK
-  - [ ] SubTask 4.2: Implement text embedding with doubao-embedding-vision-250615
-  - [ ] SubTask 4.3: Implement image embedding with doubao-embedding-vision-250615
-  - [ ] SubTask 4.4: Test embedding generation
-  - [ ] SubTask 4.5: Git commit
+- [x] Task 4: Implement multimodal embedding module
+  - [x] SubTask 4.1: Set up OpenAI client for Volcengine ARK
+  - [x] SubTask 4.2: Implement text embedding with doubao-embedding-vision-250615
+  - [x] SubTask 4.3: Implement image embedding with doubao-embedding-vision-250615
+  - [x] SubTask 4.4: Test embedding generation
+  - [x] SubTask 4.5: Git commit
 - [ ] Task 5: Set up persistent vector store
   - [ ] SubTask 5.1: Choose and integrate vector database
   - [ ] SubTask 5.2: Implement vector storage and retrieval
