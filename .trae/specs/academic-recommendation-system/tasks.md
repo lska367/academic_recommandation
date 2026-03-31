@@ -34,7 +34,7 @@
   - `programmatic` TR-2.4: 元数据正确保存
 - **Notes**: 使用真实的 arXiv API，不虚构数据
 
-## [ ] Task 3: PDF 读取和解析模块
+## [x] Task 3: PDF 读取和解析模块
 - **Priority**: P0
 - **Depends On**: Task 2
 - **Description**: 
@@ -49,7 +49,7 @@
   - `programmatic` TR-3.3: 文本内容清洗正常
 - **Notes**: 同时支持文本和图像提取，为多模态编码做准备
 
-## [ ] Task 4: 内容切片模块
+## [x] Task 4: 内容切片模块
 - **Priority**: P0
 - **Depends On**: Task 3
 - **Description**: 
