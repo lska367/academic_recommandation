@@ -34,12 +34,12 @@
   - [x] SubTask 6.3: Implement reranking with doubao-seed-2-0-lite-260215
   - [x] SubTask 6.4: Test reranking functionality
   - [x] SubTask 6.5: Git commit
-- [ ] Task 7: Implement academic report generation
-  - [ ] SubTask 7.1: Create report generation prompt
-  - [ ] SubTask 7.2: Implement report synthesis with LLM
-  - [ ] SubTask 7.3: Add citation handling
-  - [ ] SubTask 7.4: Test report generation
-  - [ ] SubTask 7.5: Git commit
+- [x] Task 7: Implement academic report generation
+  - [x] SubTask 7.1: Create report generation prompt
+  - [x] SubTask 7.2: Implement report synthesis with LLM
+  - [x] SubTask 7.3: Add citation handling
+  - [x] SubTask 7.4: Test report generation
+  - [x] SubTask 7.5: Git commit
 - [ ] Task 8: Build backend API
   - [ ] SubTask 8.1: Set up FastAPI backend
   - [ ] SubTask 8.2: Implement conversation endpoint
