@@ -37,12 +37,23 @@ function App() {
     try {
       if (currentMode === 'search') {
         const response = await apiClient.searchPapers(query);
+        
+        const uniquePapers = [];
+        const seenPaperIds = new Set();
+        for (const result of response.results) {
+          const paperId = result.metadata?.paper_id;
+          if (!seenPaperIds.has(paperId)) {
+            seenPaperIds.add(paperId);
+            uniquePapers.push(result);
+          }
+        }
+        
         const assistantMessage = {
           role: 'assistant',
-          content: `找到 ${response.total_results} 篇相关论文：`,
-          papers: response.results,
+          content: `找到 ${uniquePapers.length} 篇相关论文：`,
+          papers: uniquePapers,
         };
-        setMessages((prev) => [...prev, assistantMessage]);
+        setMessages((prev) =&gt; [...prev, assistantMessage]);
       } else {
         const response = await apiClient.generateSurvey(query);
         if (response.success) {

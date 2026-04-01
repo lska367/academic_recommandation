@@ -45,26 +45,29 @@ export const ChatMessage = ({ role, content, papers, isLoading }) => {
               {papers && papers.length > 0 && (
                 <div className="mt-4 space-y-3">
                   <h4 className="font-semibold text-sm mb-2">相关论文：</h4>
-                  {papers.map((paper, index) => (
-                    <div
-                      key={index}
-                      className="p-3 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
-                    >
-                      <h5 className="font-medium text-sm text-purple-700 dark:text-purple-400">
-                        {paper.title || '无标题'}
-                      </h5>
-                      {paper.authors && (
-                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                          {paper.authors}
-                        </p>
-                      )}
-                      {paper.summary && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">
-                          {paper.summary}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                  {papers.map((paper, index) => {
+                    const metadata = paper.metadata || paper;
+                    return (
+                      <div
+                        key={index}
+                        className="p-3 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
+                      >
+                        <h5 className="font-medium text-sm text-purple-700 dark:text-purple-400">
+                          {metadata.title || '无标题'}
+                        </h5>
+                        {metadata.authors && (
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                            {metadata.authors}
+                          </p>
+                        )}
+                        {metadata.summary && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">
+                            {metadata.summary}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
