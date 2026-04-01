@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from arxiv_crawler import ArxivCrawler
 from pdf_processor import PDFProcessor
 from multimodal_retrieval import MultimodalRetrieval
-from reranker import MultimodalReranker
+from reranker import Reranker
 from report_generator import ReportGenerator
 
 
@@ -44,10 +44,10 @@ def init_services():
         print(f"⚠️  MultimodalRetrieval initialization error: {e}")
     
     try:
-        reranker = MultimodalReranker()
-        print("✅ MultimodalReranker initialized")
+        reranker = Reranker()
+        print("✅ Reranker initialized")
     except Exception as e:
-        print(f"⚠️  MultimodalReranker initialization error: {e}")
+        print(f"⚠️  Reranker initialization error: {e}")
     
     try:
         report_generator = ReportGenerator()
@@ -69,6 +69,9 @@ def init_services():
 
 
 def ensure_sufficient_data(target_count: int = 50):
+    api_key = os.getenv("VOLCENGINE_API_KEY")
+    has_valid_api_key = api_key and api_key != "your_api_key_here"
+    
     data_dir = Path(os.getenv("DATA_DIR", "./data"))
     pdf_dir = data_dir / "pdfs"
     processed_dir = data_dir / "processed"
@@ -96,7 +99,7 @@ def ensure_sufficient_data(target_count: int = 50):
         processed_count = len(list(processed_dir.glob("*_processed.json")))
     
     index_count = 0
-    if retrieval:
+    if retrieval and has_valid_api_key:
         try:
             index_stats = retrieval.get_index_stats()
             index_count = index_stats.get("count", 0)
@@ -107,14 +110,20 @@ def ensure_sufficient_data(target_count: int = 50):
     print(f"📚 PDF files: {pdf_count}")
     print(f"✂️  Processed papers: {processed_count}")
     print(f"🔍 Indexed chunks: {index_count}")
+    print(f"🔑 API key configured: {'Yes' if has_valid_api_key else 'No'}")
     
-    if metadata_count &gt;= target_count and processed_count &gt;= target_count and index_count &gt; 0:
-        print(f"\n✅ Data check passed! Already have sufficient data.")
-        return True
+    if metadata_count >= target_count and processed_count >= target_count:
+        if has_valid_api_key and index_count > 0:
+            print(f"\n✅ Data check passed! Already have sufficient data and index.")
+            return True
+        elif not has_valid_api_key:
+            print(f"\n⚠️  Data check passed (papers and PDFs ready), but API key not configured for indexing.")
+            print(f"   Run 'python prepare_data.py' after setting API key to build index.")
+            return True
     
     print(f"\n⚠️  Insufficient data. Starting data pipeline...")
     
-    if not crawler or not pdf_processor or not retrieval:
+    if not crawler or not pdf_processor:
         print("❌ Required services not initialized")
         return False
     
@@ -141,12 +150,19 @@ def ensure_sufficient_data(target_count: int = 50):
         
         print(f"\n✅ Processed {len(processed_papers)} papers")
         
-        print("\n" + "=" * 60)
-        print("🔍 Step 3: Encoding and indexing papers")
-        print("=" * 60)
-        total_chunks = retrieval.encode_and_index_all_processed()
-        
-        print(f"\n✅ Indexed {total_chunks} chunks")
+        if has_valid_api_key and retrieval:
+            print("\n" + "=" * 60)
+            print("🔍 Step 3: Encoding and indexing papers")
+            print("=" * 60)
+            try:
+                total_chunks = retrieval.encode_and_index_all_processed()
+                print(f"\n✅ Indexed {total_chunks} chunks")
+            except Exception as e:
+                print(f"\n⚠️  Indexing skipped due to error: {e}")
+                print(f"   You can run 'python prepare_data.py' later to build index.")
+        else:
+            print(f"\n⚠️  Skipping indexing step (API key not configured)")
+            print(f"   Run 'python prepare_data.py' after setting API key to build index.")
         
         print("\n" + "=" * 60)
         print("✅ Data pipeline completed successfully!")
@@ -215,7 +231,7 @@ async def search(request: SearchRequest):
             n_results=request.n_results
         )
         
-        if request.use_rerank and reranker and len(results) &gt; 1:
+        if request.use_rerank and reranker and len(results) > 1:
             results = reranker.rerank(
                 query=request.query,
                 results=results,
@@ -430,4 +446,3 @@ if __name__ == "__main__":
     
     print(f"Starting Academic Recommendation API server on {host}:{port}")
     uvicorn.run(app, host=host, port=port)
-

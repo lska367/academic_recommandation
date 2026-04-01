@@ -40,7 +40,7 @@ class MultimodalRetrieval:
             collection_name=self.collection_name
         )
     
-    def encode_and_index_paper(self, processed_paper: Dict[str, Any]) -&gt; int:
+    def encode_and_index_paper(self, processed_paper: Dict[str, Any]) -> int:
         paper_id = processed_paper["paper_id"]
         chunks = processed_paper["chunks"]
         title = processed_paper["title"]
@@ -74,7 +74,7 @@ class MultimodalRetrieval:
         print(f"Successfully indexed {len(chunks)} chunks for paper: {paper_id}")
         return len(chunks)
     
-    def encode_and_index_all_processed(self) -&gt; int:
+    def encode_and_index_all_processed(self) -> int:
         total_chunks = 0
         
         if not self.processed_dir.exists():
@@ -107,8 +107,8 @@ class MultimodalRetrieval:
         query: str,
         n_results: int = 10,
         where: Optional[Dict[str, Any]] = None
-    ) -&gt; List[Dict[str, Any]]:
-        query_embedding = self.embedder.embed_text(query)
+    ) -> List[Dict[str, Any]]:
+        query_embedding = self.embedder.embed_text(query, instruction_type="query")
         
         results = self.vector_store.similarity_search(
             query=query,
@@ -119,7 +119,7 @@ class MultimodalRetrieval:
         
         return results
     
-    def get_index_stats(self) -&gt; Dict[str, Any]:
+    def get_index_stats(self) -> Dict[str, Any]:
         return self.vector_store.get_collection_stats()
     
     def clear_index(self):
