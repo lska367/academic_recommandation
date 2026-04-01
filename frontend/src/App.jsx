@@ -1,8 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
-import { BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
+
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { BookOpen, AlertCircle, Sparkles, Search } from 'lucide-react';
 import { ChatMessage } from './components/ChatMessage';
 import { ChatInput } from './components/ChatInput';
 import { apiClient } from './api/client';
+
+const MODE_CONFIG = {
+  search: { icon: Search, label: '论文检索', placeholder: '输入研究主题，如：深度学习在计算机视觉中的应用' },
+  survey: { icon: Sparkles, label: '学术综述', placeholder: '输入主题生成学术综述，如：自然语言处理的最新进展' },
+};
 
 function App() {
   const [messages, setMessages] = useState([]);
@@ -12,13 +18,13 @@ function App() {
   const [backendHealth, setBackendHealth] = useState(true);
   const messagesEndRef = useRef(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages, isLoading, scrollToBottom]);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -28,10 +34,10 @@ function App() {
     checkHealth();
   }, []);
 
-  const handleSend = async (query, currentMode) => {
+  const handleSend = useCallback(async (query, currentMode) => {
     setError(null);
     const userMessage = { role: 'user', content: query };
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
 
     try {
@@ -53,7 +59,7 @@ function App() {
           content: `找到 ${uniquePapers.length} 篇相关论文：`,
           papers: uniquePapers,
         };
-        setMessages((prev) =&gt; [...prev, assistantMessage]);
+        setMessages(prev => [...prev, assistantMessage]);
       } else {
         const response = await apiClient.generateSurvey(query);
         if (response.success) {
@@ -62,7 +68,7 @@ function App() {
             content: response.report_content,
             papers: response.paper_info?.papers || [],
           };
-          setMessages((prev) => [...prev, assistantMessage]);
+          setMessages(prev => [...prev, assistantMessage]);
         } else {
           throw new Error(response.error || '生成综述失败');
         }
@@ -72,76 +78,133 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  const handleQuickSearch = useCallback((query, targetMode) => {
+    setMode(targetMode);
+    handleSend(query, targetMode);
+  }, [handleSend]);
+
+  const currentModeConfig = MODE_CONFIG[mode];
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-slate-50 via-purple-50/30 to-indigo-50 dark:from-slate-950 dark:via-purple-950/20 dark:to-indigo-950/30">
+      <header className="bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-6 py-4 sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center">
-              <BookOpen className="text-white" size={24} />
+            <div className="relative">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30">
+                <BookOpen className="text-white" size={28} />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900 shadow-sm" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-slate-900 to-purple-700 dark:from-white dark:to-purple-300 bg-clip-text text-transparent">
                 学术推荐系统
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                智能论文检索与学术综述生成
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                智能论文检索 · 多模态理解 · 学术综述生成
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          
+          <div className="flex items-center gap-4">
             {!backendHealth && (
-              <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-                <AlertCircle size={16} />
-                <span>后端连接失败</span>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-950/50 rounded-lg border border-red-200 dark:border-red-900/50">
+                <AlertCircle size={14} className="text-red-600 dark:text-red-400" />
+                <span className="text-xs font-medium text-red-700 dark:text-red-300">
+                  后端连接失败
+                </span>
               </div>
             )}
+            
+            <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/50">
+              {Object.entries(MODE_CONFIG).map(([key, config]) => {
+                const Icon = config.icon;
+                const isActive = mode === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setMode(key)}
+                    className={`
+                      flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+                      ${isActive 
+                        ? 'bg-white dark:bg-slate-700 text-purple-700 dark:text-purple-200 shadow-sm ring-1 ring-purple-200/50 dark:ring-purple-500/30' 
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50'}
+                    `}
+                  >
+                    <Icon size={16} />
+                    {config.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+      <main className="flex-1 overflow-y-auto scroll-smooth">
+        <div className="max-w-5xl mx-auto px-6 py-8">
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-              <div className="w-24 h-24 bg-purple-100 dark:bg-purple-900/30 rounded-3xl flex items-center justify-center mb-6">
-                <BookOpen size={48} className="text-purple-600 dark:text-purple-400" />
+            <div className="flex flex-col items-center justify-center min-h-[calc(100vh-160px)]">
+              <div className="relative mb-8">
+                <div className="w-32 h-32 bg-gradient-to-br from-purple-100 to-indigo-100 dark:from-purple-900/40 dark:to-indigo-900/40 rounded-[32px] flex items-center justify-center shadow-2xl shadow-purple-500/10">
+                  <BookOpen size={64} className="text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="absolute -top-3 -right-3 w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/30">
+                  <Sparkles size={20} className="text-white" />
+                </div>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+              
+              <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3 text-center">
                 欢迎使用学术推荐系统
               </h2>
-              <p className="text-gray-600 dark:text-gray-400 max-w-md mb-8">
-                输入您感兴趣的研究主题，系统将帮您检索相关论文或生成学术综述报告
+              <p className="text-slate-600 dark:text-slate-400 max-w-xl text-center mb-10 leading-relaxed">
+                输入您感兴趣的研究主题，系统将利用多模态检索技术帮您找到相关论文或生成全面的学术综述报告
               </p>
-              <div className="grid gap-4 w-full max-w-lg">
+              
+              <div className="grid gap-4 w-full max-w-2xl">
                 <button
-                  onClick={() => handleSend('深度学习在计算机视觉中的应用', 'search')}
-                  className="text-left p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-purple-500 hover:shadow-sm transition-all"
+                  onClick={() => handleQuickSearch('深度学习在计算机视觉中的应用', 'search')}
+                  className="group text-left p-5 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-purple-300 dark:hover:border-purple-700/50 hover:shadow-xl hover:shadow-purple-500/5 transition-all duration-300"
                 >
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    🔍 检索论文
-                  </span>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    深度学习在计算机视觉中的应用
-                  </p>
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Search size={20} className="text-white" />
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-900 dark:text-white block mb-1">
+                        🔍 论文检索示例
+                      </span>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        深度学习在计算机视觉中的应用
+                      </p>
+                    </div>
+                  </div>
                 </button>
+                
                 <button
-                  onClick={() => handleSend('自然语言处理的最新进展', 'survey')}
-                  className="text-left p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-purple-500 hover:shadow-sm transition-all"
+                  onClick={() => handleQuickSearch('自然语言处理的最新进展', 'survey')}
+                  className="group text-left p-5 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-purple-300 dark:hover:border-purple-700/50 hover:shadow-xl hover:shadow-purple-500/5 transition-all duration-300"
                 >
-                  <span className="font-medium text-gray-900 dark:text-white">
-                    ✨ 生成综述
-                  </span>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                    自然语言处理的最新进展
-                  </p>
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Sparkles size={20} className="text-white" />
+                    </div>
+                    <div>
+                      <span className="font-semibold text-slate-900 dark:text-white block mb-1">
+                        ✨ 学术综述示例
+                      </span>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        自然语言处理的最新进展
+                      </p>
+                    </div>
+                  </div>
                 </button>
               </div>
             </div>
           ) : (
-            <div className="space-y-1">
+            <div className="space-y-6 mb-8">
               {messages.map((message, index) => (
                 <ChatMessage
                   key={index}
@@ -153,28 +216,32 @@ function App() {
               {isLoading && (
                 <ChatMessage role="assistant" isLoading={true} />
               )}
-              <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} className="h-4" />
             </div>
           )}
 
           {error && (
-            <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="text-red-600 dark:text-red-400" size={20} />
-                <div className="flex-1">
-                  <p className="text-red-800 dark:text-red-200 font-medium">
-                    发生错误
-                  </p>
-                  <p className="text-red-600 dark:text-red-400 text-sm mt-1">
-                    {error}
-                  </p>
+            <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-50 max-w-lg w-full px-4">
+              <div className="p-4 bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-950/60 dark:to-rose-950/60 border border-red-200 dark:border-red-800/50 rounded-2xl shadow-2xl backdrop-blur-sm">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={20} />
+                  <div className="flex-1">
+                    <p className="text-red-900 dark:text-red-100 font-semibold text-sm">
+                      发生错误
+                    </p>
+                    <p className="text-red-700 dark:text-red-300 text-sm mt-1 leading-relaxed">
+                      {error}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setError(null)}
+                    className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 p-1 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-                <button
-                  onClick={() => setError(null)}
-                  className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
-                >
-                  <RefreshCw size={20} />
-                </button>
               </div>
             </div>
           )}
@@ -186,6 +253,7 @@ function App() {
         isLoading={isLoading}
         mode={mode}
         onModeChange={setMode}
+        placeholder={currentModeConfig.placeholder}
       />
     </div>
   );
