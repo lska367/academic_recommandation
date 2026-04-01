@@ -35,6 +35,7 @@ function App() {
   }, []);
 
   const handleSend = useCallback(async (query, currentMode) => {
+    console.log('[App] handleSend called:', { query, currentMode });
     setError(null);
     const userMessage = { role: 'user', content: query };
     setMessages(prev => [...prev, userMessage]);
@@ -42,7 +43,9 @@ function App() {
 
     try {
       if (currentMode === 'search') {
-        const response = await apiClient.searchPapers(query);
+        console.log('[App] Calling searchPapers...');
+        const response = await apiClient.searchPapers(query, 10, false);
+        console.log('[App] Search response received:', response);
         
         const uniquePapers = [];
         const seenPaperIds = new Set();
@@ -54,6 +57,8 @@ function App() {
           }
         }
         
+        console.log('[App] Unique papers:', uniquePapers.length);
+        
         const assistantMessage = {
           role: 'assistant',
           content: `找到 ${uniquePapers.length} 篇相关论文：`,
@@ -61,6 +66,7 @@ function App() {
         };
         setMessages(prev => [...prev, assistantMessage]);
       } else {
+        console.log('[App] Calling generateSurvey...');
         const response = await apiClient.generateSurvey(query);
         if (response.success) {
           const assistantMessage = {
@@ -74,7 +80,9 @@ function App() {
         }
       }
     } catch (err) {
-      setError(err.message);
+      console.error('[App] Error in handleSend:', err);
+      const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      setError(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -229,8 +237,11 @@ function App() {
                     <p className="text-red-900 dark:text-red-100 font-semibold text-sm">
                       发生错误
                     </p>
-                    <p className="text-red-700 dark:text-red-300 text-sm mt-1 leading-relaxed">
+                    <p className="text-red-700 dark:text-red-300 text-sm mt-1 leading-relaxed whitespace-pre-wrap">
                       {error}
+                    </p>
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-2">
+                      (请打开浏览器控制台查看详细调试信息)
                     </p>
                   </div>
                   <button

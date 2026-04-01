@@ -118,7 +118,7 @@ class DataPipeline:
         for key, value in stats.items():
             print(f"  {key}: {value}")
     
-    def get_pipeline_stats(self) -&gt; dict:
+    def get_pipeline_stats(self) -> dict:
         stats = {}
         
         metadata_count = self.crawler.get_paper_count()

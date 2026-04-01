@@ -27,7 +27,7 @@ class SurveyGenerator:
             base_url=self.base_url
         )
     
-    def _aggregate_paper_info(self, results: List[Dict[str, Any]]) -&gt; Dict[str, Any]:
+    def _aggregate_paper_info(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
         papers = {}
         
         for result in results:
@@ -54,7 +54,7 @@ class SurveyGenerator:
             "total_chunks": len(results)
         }
     
-    def _build_survey_prompt(self, topic: str, paper_info: Dict[str, Any]) -&gt; str:
+    def _build_survey_prompt(self, topic: str, paper_info: Dict[str, Any]) -> str:
         papers_list = paper_info["papers"]
         
         papers_text = ""
@@ -130,7 +130,7 @@ class SurveyGenerator:
         self,
         topic: str,
         search_results: List[Dict[str, Any]]
-    ) -&gt; Dict[str, Any]:
+    ) -> Dict[str, Any]:
         if not search_results:
             return {
                 "success": False,
@@ -192,7 +192,7 @@ def main():
                 "metadata": {
                     "paper_id": "paper1",
                     "title": "Attention Is All You Need",
-                    "authors": "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., &amp; Polosukhin, I.",
+                    "authors": "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., & Polosukhin, I.",
                     "summary": "提出了Transformer架构，完全基于注意力机制，放弃了循环和卷积网络。"
                 }
             },
@@ -201,7 +201,7 @@ def main():
                 "metadata": {
                     "paper_id": "paper2",
                     "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
-                    "authors": "Devlin, J., Chang, M.-W., Lee, K., &amp; Toutanova, K.",
+                    "authors": "Devlin, J., Chang, M.-W., Lee, K., & Toutanova, K.",
                     "summary": "引入了双向Transformer预训练模型BERT，在11项NLP任务上取得了state-of-the-art结果。"
                 }
             },
@@ -210,7 +210,7 @@ def main():
                 "metadata": {
                     "paper_id": "paper3",
                     "title": "Language Models are Few-Shot Learners",
-                    "authors": "Brown, T. B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., ... &amp; Amodei, D.",
+                    "authors": "Brown, T. B., Mann, B., Ryder, N., Subbiah, M., Kaplan, J., Dhariwal, P., ... & Amodei, D.",
                     "summary": "展示了GPT-3在few-shot学习上的惊人能力，参数规模达到1750亿。"
                 }
             }
@@ -226,7 +226,7 @@ def main():
                 print("✅ Survey generated successfully!")
                 print(f"   Total papers used: {result['paper_info']['total_papers']}")
                 print(f"   Total chunks used: {result['paper_info']['total_chunks']}")
-                preview = result["survey_content"][:500] + "..." if len(result["survey_content"]) &gt; 500 else result["survey_content"]
+                preview = result["survey_content"][:500] + "..." if len(result["survey_content"]) > 500 else result["survey_content"]
                 print(f"\n📄 Preview:\n{preview}")
             else:
                 print(f"❌ Failed: {result['error']}")
