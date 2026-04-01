@@ -12,7 +12,7 @@ from arxiv_crawler import ArxivCrawler
 from pdf_processor import PDFProcessor
 from multimodal_retrieval import MultimodalRetrieval
 from reranker import MultimodalReranker
-from survey_generator import SurveyGenerator
+from report_generator import ReportGenerator
 
 
 load_dotenv()
@@ -29,13 +29,13 @@ app.add_middleware(
 
 retrieval = None
 reranker = None
-survey_generator = None
+report_generator = None
 crawler = None
 pdf_processor = None
 
 
 def init_services():
-    global retrieval, reranker, survey_generator, crawler, pdf_processor
+    global retrieval, reranker, report_generator, crawler, pdf_processor
     
     try:
         retrieval = MultimodalRetrieval()
@@ -50,10 +50,10 @@ def init_services():
         print(f"⚠️  MultimodalReranker initialization error: {e}")
     
     try:
-        survey_generator = SurveyGenerator()
-        print("✅ SurveyGenerator initialized")
+        report_generator = ReportGenerator()
+        print("✅ ReportGenerator initialized")
     except Exception as e:
-        print(f"⚠️  SurveyGenerator initialization error: {e}")
+        print(f"⚠️  ReportGenerator initialization error: {e}")
     
     try:
         crawler = ArxivCrawler()
@@ -68,9 +68,102 @@ def init_services():
         print(f"⚠️  PDFProcessor initialization error: {e}")
 
 
+def ensure_sufficient_data(target_count: int = 50):
+    data_dir = Path(os.getenv("DATA_DIR", "./data"))
+    pdf_dir = data_dir / "pdfs"
+    processed_dir = data_dir / "processed"
+    metadata_file = data_dir / "metadata.json"
+    
+    print("\n" + "=" * 60)
+    print("📊 Checking data status...")
+    print("=" * 60)
+    
+    metadata_count = 0
+    if metadata_file.exists():
+        try:
+            with open(metadata_file, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+                metadata_count = len(metadata)
+        except:
+            pass
+    
+    pdf_count = 0
+    if pdf_dir.exists():
+        pdf_count = len(list(pdf_dir.glob("*.pdf")))
+    
+    processed_count = 0
+    if processed_dir.exists():
+        processed_count = len(list(processed_dir.glob("*_processed.json")))
+    
+    index_count = 0
+    if retrieval:
+        try:
+            index_stats = retrieval.get_index_stats()
+            index_count = index_stats.get("count", 0)
+        except:
+            pass
+    
+    print(f"📄 Metadata papers: {metadata_count}")
+    print(f"📚 PDF files: {pdf_count}")
+    print(f"✂️  Processed papers: {processed_count}")
+    print(f"🔍 Indexed chunks: {index_count}")
+    
+    if metadata_count &gt;= target_count and processed_count &gt;= target_count and index_count &gt; 0:
+        print(f"\n✅ Data check passed! Already have sufficient data.")
+        return True
+    
+    print(f"\n⚠️  Insufficient data. Starting data pipeline...")
+    
+    if not crawler or not pdf_processor or not retrieval:
+        print("❌ Required services not initialized")
+        return False
+    
+    try:
+        print("\n" + "=" * 60)
+        print("📥 Step 1: Crawling papers from arXiv")
+        print("=" * 60)
+        papers = crawler.run(target_count=target_count)
+        
+        if not papers:
+            print("❌ No papers crawled")
+            return False
+        
+        print(f"\n✅ Crawled {len(papers)} papers")
+        
+        print("\n" + "=" * 60)
+        print("📄 Step 2: Processing PDF files")
+        print("=" * 60)
+        processed_papers = pdf_processor.process_all_papers(papers)
+        
+        if not processed_papers:
+            print("❌ No papers processed")
+            return False
+        
+        print(f"\n✅ Processed {len(processed_papers)} papers")
+        
+        print("\n" + "=" * 60)
+        print("🔍 Step 3: Encoding and indexing papers")
+        print("=" * 60)
+        total_chunks = retrieval.encode_and_index_all_processed()
+        
+        print(f"\n✅ Indexed {total_chunks} chunks")
+        
+        print("\n" + "=" * 60)
+        print("✅ Data pipeline completed successfully!")
+        print("=" * 60)
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Data pipeline failed: {e}")
+        return False
+
+
 @app.on_event("startup")
 async def startup_event():
     init_services()
+    target_count = int(os.getenv("TARGET_PAPER_COUNT", 50))
+    ensure_sufficient_data(target_count)
 
 
 class SearchRequest(BaseModel):
@@ -80,9 +173,14 @@ class SearchRequest(BaseModel):
     top_k: Optional[int] = None
 
 
-class SurveyRequest(BaseModel):
+class ReportRequest(BaseModel):
     topic: str
     n_results: int = 15
+
+
+class ConversationRequest(BaseModel):
+    messages: List[Dict[str, str]]
+    use_context: bool = True
 
 
 @app.get("/")
@@ -93,7 +191,8 @@ async def root():
         "endpoints": {
             "health": "/health",
             "search": "/api/search",
-            "survey": "/api/survey",
+            "report": "/api/report",
+            "conversation": "/api/conversation",
             "data/check": "/api/data/check",
             "index/stats": "/api/index/stats"
         }
@@ -135,9 +234,9 @@ async def search(request: SearchRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/survey")
-async def generate_survey(request: SurveyRequest):
-    if not retrieval or not survey_generator:
+@app.post("/api/report")
+async def generate_report(request: ReportRequest):
+    if not retrieval or not report_generator:
         raise HTTPException(status_code=500, detail="Required services not initialized")
     
     try:
@@ -152,12 +251,88 @@ async def generate_survey(request: SurveyRequest):
                 "error": "No relevant papers found for this topic"
             }
         
-        survey_result = survey_generator.generate_survey(
+        report_result = report_generator.generate_report(
             topic=request.topic,
             search_results=search_results
         )
         
-        return survey_result
+        return report_result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/conversation")
+async def conversation(request: ConversationRequest):
+    if not retrieval or not report_generator:
+        raise HTTPException(status_code=500, detail="Required services not initialized")
+    
+    try:
+        last_message = request.messages[-1] if request.messages else None
+        if not last_message or last_message.get("role") != "user":
+            raise HTTPException(status_code=400, detail="Last message must be from user")
+        
+        user_query = last_message.get("content", "")
+        
+        search_results = []
+        if request.use_context:
+            search_results = retrieval.search(
+                query=user_query,
+                n_results=10
+            )
+        
+        context_text = ""
+        if search_results:
+            papers = {}
+            for result in search_results:
+                metadata = result.get("metadata", {})
+                paper_id = metadata.get("paper_id")
+                if paper_id not in papers:
+                    papers[paper_id] = {
+                        "title": metadata.get("title", ""),
+                        "authors": metadata.get("authors", ""),
+                        "summary": metadata.get("summary", ""),
+                        "chunks": []
+                    }
+                papers[paper_id]["chunks"].append(result.get("document", ""))
+            
+            context_text = "\n\n相关论文信息：\n"
+            for i, (paper_id, paper_info) in enumerate(papers.items(), 1):
+                context_text += f"\n[{i}] {paper_info['title']}\n"
+                context_text += f"    作者: {paper_info['authors']}\n"
+                context_text += f"    摘要: {paper_info['summary']}\n"
+                context_text += f"    关键内容: {' '.join(paper_info['chunks'][:2])}\n"
+        
+        conversation_history = "\n".join([
+            f"{msg.get('role', 'user')}: {msg.get('content', '')}"
+            for msg in request.messages[:-1]
+        ])
+        
+        prompt = f"""你是一位学术研究助手，请根据用户的问题提供专业、准确的回答。
+
+对话历史：
+{conversation_history}
+
+{context_text}
+
+用户问题：{user_query}
+
+请根据上述信息回答用户的问题。如果提供了相关论文，请在回答中适当引用。回答要专业、清晰、有帮助。"""
+        
+        response = report_generator.client.chat.completions.create(
+            model=report_generator.model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=2000
+        )
+        
+        assistant_response = response.choices[0].message.content
+        
+        return {
+            "success": True,
+            "response": assistant_response,
+            "papers_used": len(search_results) if search_results else 0
+        }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -255,3 +430,4 @@ if __name__ == "__main__":
     
     print(f"Starting Academic Recommendation API server on {host}:{port}")
     uvicorn.run(app, host=host, port=port)
+

@@ -40,22 +40,22 @@
   - [x] SubTask 7.3: Add citation handling
   - [x] SubTask 7.4: Test report generation
   - [x] SubTask 7.5: Git commit
-- [ ] Task 8: Build backend API
-  - [ ] SubTask 8.1: Set up FastAPI backend
-  - [ ] SubTask 8.2: Implement conversation endpoint
-  - [ ] SubTask 8.3: Implement paper recommendation endpoint
-  - [ ] SubTask 8.4: Implement report generation endpoint
-  - [ ] SubTask 8.5: Add automatic startup data check
-  - [ ] SubTask 8.6: Test backend API
+- [x] Task 8: Build backend API
+  - [x] SubTask 8.1: Set up FastAPI backend
+  - [x] SubTask 8.2: Implement conversation endpoint
+  - [x] SubTask 8.3: Implement paper recommendation endpoint
+  - [x] SubTask 8.4: Implement report generation endpoint
+  - [x] SubTask 8.5: Add automatic startup data check
+  - [x] SubTask 8.6: Test backend API
   - [ ] SubTask 8.7: Git commit
-- [ ] Task 9: Create React frontend
-  - [ ] SubTask 9.1: Set up React project with Vite
-  - [ ] SubTask 9.2: Implement conversational UI
-  - [ ] SubTask 9.3: Add paper recommendation display
-  - [ ] SubTask 9.4: Implement academic report view
-  - [ ] SubTask 9.5: Style frontend for good UX
-  - [ ] SubTask 9.6: Test frontend
-  - [ ] SubTask 9.7: Git commit
+- [x] Task 9: Create React frontend
+  - [x] SubTask 9.1: Set up React project with Vite
+  - [x] SubTask 9.2: Implement conversational UI
+  - [x] SubTask 9.3: Add paper recommendation display
+  - [x] SubTask 9.4: Implement academic report view
+  - [x] SubTask 9.5: Style frontend for good UX
+  - [x] SubTask 9.6: Test frontend
+  - [x] SubTask 9.7: Git commit
 - [ ] Task 10: Integration and final testing
   - [ ] SubTask 10.1: Integrate frontend and backend
   - [ ] SubTask 10.2: Run full system test
