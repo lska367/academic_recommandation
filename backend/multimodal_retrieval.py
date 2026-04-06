@@ -2,7 +2,7 @@
 import os
 import json
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional,Callable
 from dotenv import load_dotenv
 
 from embedding_module import MultimodalEmbedding
@@ -106,17 +106,30 @@ class MultimodalRetrieval:
         self,
         query: str,
         n_results: int = 10,
-        where: Optional[Dict[str, Any]] = None
+        where: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable[[str, str, Dict[str, Any]], None]] = None
     ) -> List[Dict[str, Any]]:
+        if progress_callback:
+            progress_callback("search_start", "开始检索相关论文", {})
+
+        if progress_callback:
+            progress_callback("query_encoding", "正在编码查询文本", {})
+
         query_embedding = self.embedder.embed_text(query, instruction_type="query")
-        
+
+        if progress_callback:
+            progress_callback("vector_search", "正在进行向量相似度搜索", {})
+
         results = self.vector_store.similarity_search(
             query=query,
             n_results=n_results,
             where=where,
             query_embedding=query_embedding
         )
-        
+
+        if progress_callback:
+            progress_callback("vector_search_complete", f"检索完成，找到 {len(results)} 个相关结果", {"found": len(results)})
+
         return results
     
     def get_index_stats(self) -> Dict[str, Any]:

@@ -5,6 +5,7 @@ import feedparser
 import requests
 from pathlib import Path
 from typing import List, Dict, Optional
+from requests.exceptions import HTTPError
 
 
 class ArxivCrawler:
@@ -12,12 +13,13 @@ class ArxivCrawler:
         self.data_dir = Path(data_dir)
         self.pdf_dir = self.data_dir / "pdfs"
         self.metadata_file = self.data_dir / "metadata.json"
-        
+
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.pdf_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.base_api_url = "http://export.arxiv.org/api/query"
-    
+        self.request_delay = 3
+
     def fetch_papers(
         self,
         categories: List[str] = ["cs.AI", "cs.LG", "cs.CL"],
@@ -26,7 +28,7 @@ class ArxivCrawler:
     ) -> List[Dict]:
         category_query = " OR ".join([f"cat:{cat}" for cat in categories])
         query = f"({category_query})"
-        
+
         params = {
             "search_query": query,
             "start": start,
@@ -34,10 +36,25 @@ class ArxivCrawler:
             "sortBy": "submittedDate",
             "sortOrder": "descending"
         }
-        
-        response = requests.get(self.base_api_url, params=params)
-        response.raise_for_status()
-        
+
+        max_retries = 5
+        base_delay = 10
+
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(self.base_api_url, params=params)
+                response.raise_for_status()
+                break
+            except HTTPError as e:
+                if response.status_code == 429:
+                    delay = base_delay * (2 ** attempt)
+                    print(f"Rate limit hit (429). Waiting {delay} seconds before retry {attempt + 1}/{max_retries}...")
+                    time.sleep(delay)
+                else:
+                    raise
+        else:
+            raise Exception(f"Failed to fetch after {max_retries} retries due to rate limiting")
+
         feed = feedparser.parse(response.content)
         papers = []
         
@@ -123,7 +140,7 @@ class ArxivCrawler:
                         break
             
             start += batch_size
-            time.sleep(1)
+            time.sleep(self.request_delay)
         
         all_papers = existing_papers + new_papers
         

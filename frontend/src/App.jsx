@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { BookOpen, AlertCircle, Sparkles, Search } from 'lucide-react';
 import { ChatMessage } from './components/ChatMessage';
 import { ChatInput } from './components/ChatInput';
+import { ProgressIndicator } from './components/ProgressIndicator';
 import { apiClient } from './api/client';
 
 const MODE_CONFIG = {
@@ -16,6 +17,10 @@ function App() {
   const [error, setError] = useState(null);
   const [mode, setMode] = useState('search');
   const [backendHealth, setBackendHealth] = useState(true);
+  const [progressStage, setProgressStage] = useState(null);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [streamingContent, setStreamingContent] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = useCallback(() => {
@@ -37,46 +42,132 @@ function App() {
   const handleSend = useCallback(async (query, currentMode) => {
     console.log('[App] handleSend called:', { query, currentMode });
     setError(null);
+    setProgressStage(null);
+    setProgressMessage('');
+    setStreamingContent('');
+    setIsStreaming(false);
+
     const userMessage = { role: 'user', content: query };
     setMessages(prev => [...prev, userMessage]);
     setIsLoading(true);
 
     try {
       if (currentMode === 'search') {
-        console.log('[App] Calling searchPapers...');
-        const response = await apiClient.searchPapers(query, 10, false);
-        console.log('[App] Search response received:', response);
-        
-        const uniquePapers = [];
-        const seenPaperIds = new Set();
-        for (const result of response.results) {
-          const paperId = result.metadata?.paper_id;
-          if (!seenPaperIds.has(paperId)) {
-            seenPaperIds.add(paperId);
-            uniquePapers.push(result);
+        console.log('[App] Calling searchPapersWithProgress...');
+        setProgressStage('search_start');
+        setProgressMessage('开始检索相关论文...');
+
+        const response = await apiClient.searchPapersWithProgress(
+          query,
+          10,
+          true,
+          10,
+          (progressData) => {
+            console.log('[App] Search progress:', progressData);
+            if (progressData.data) {
+              setProgressStage(progressData.data.stage);
+              setProgressMessage(progressData.data.message);
+            }
           }
-        }
-        
-        console.log('[App] Unique papers:', uniquePapers.length);
-        
-        const assistantMessage = {
-          role: 'assistant',
-          content: `找到 ${uniquePapers.length} 篇相关论文：`,
-          papers: uniquePapers,
-        };
-        setMessages(prev => [...prev, assistantMessage]);
-      } else {
-        console.log('[App] Calling generateSurvey...');
-        const response = await apiClient.generateSurvey(query);
+        );
+
+        console.log('[App] Search response received:', response);
+
+        setProgressStage(null);
+        setProgressMessage('');
+
         if (response.success) {
+          const uniquePapers = [];
+          const seenPaperIds = new Set();
+          for (const result of response.results || []) {
+            const paperId = result.metadata?.paper_id;
+            if (!seenPaperIds.has(paperId)) {
+              seenPaperIds.add(paperId);
+              uniquePapers.push(result);
+            }
+          }
+
+          console.log('[App] Unique papers:', uniquePapers.length);
+
           const assistantMessage = {
             role: 'assistant',
-            content: response.report_content,
-            papers: response.paper_info?.papers || [],
+            content: `找到 ${uniquePapers.length} 篇相关论文：`,
+            papers: uniquePapers,
           };
           setMessages(prev => [...prev, assistantMessage]);
         } else {
-          throw new Error(response.error || '生成综述失败');
+          throw new Error(response.error || '检索失败');
+        }
+      } else {
+        console.log('[App] Calling generateSurveyWithProgress...');
+
+        setProgressStage('report_start');
+        setProgressMessage('正在检索相关论文并生成综述...');
+
+        const assistantMessageId = Date.now();
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '',
+          isStreaming: true,
+          streamingContent: '',
+          messageId: assistantMessageId,
+        }]);
+
+        setIsStreaming(true);
+        setIsLoading(false);
+
+        try {
+          const response = await apiClient.generateSurveyWithProgress(
+            query,
+            15,
+            (progressData) => {
+              console.log('[App] Survey progress:', progressData);
+
+              if (progressData.stage === 'report_start' || progressData.stage === 'report_content_start') {
+                setProgressStage(progressData.stage);
+                setProgressMessage(progressData.message || '正在生成报告...');
+              }
+
+              if (progressData.event === 'report_chunk' && progressData.fullContent) {
+                setMessages(prev => prev.map(msg => {
+                  if (msg.messageId === assistantMessageId) {
+                    return {
+                      ...msg,
+                      streamingContent: progressData.fullContent,
+                    };
+                  }
+                  return msg;
+                }));
+              }
+            }
+          );
+
+          console.log('[App] Survey response received:', response);
+
+          if (response.success) {
+            setMessages(prev => prev.map(msg => {
+              if (msg.messageId === assistantMessageId) {
+                return {
+                  ...msg,
+                  content: response.report_content,
+                  papers: response.paper_info?.papers || [],
+                  isStreaming: false,
+                  streamingContent: null,
+                };
+              }
+              return msg;
+            }));
+          } else {
+            throw new Error(response.error || '生成综述失败');
+          }
+        } catch (err) {
+          setMessages(prev => prev.filter(msg => msg.messageId !== assistantMessageId));
+          throw err;
+        } finally {
+          setProgressStage(null);
+          setProgressMessage('');
+          setIsStreaming(false);
+          setStreamingContent('');
         }
       }
     } catch (err) {
@@ -85,6 +176,9 @@ function App() {
       setError(errorMsg);
     } finally {
       setIsLoading(false);
+      setProgressStage(null);
+      setProgressMessage('');
+      setIsStreaming(false);
     }
   }, []);
 
@@ -219,9 +313,20 @@ function App() {
                   role={message.role}
                   content={message.content}
                   papers={message.papers}
+                  isLoading={false}
+                  isStreaming={message.isStreaming}
+                  streamingContent={message.streamingContent}
                 />
               ))}
-              {isLoading && (
+              {progressStage && (
+                <div className="max-w-3xl mx-auto">
+                  <ProgressIndicator
+                    stage={progressStage}
+                    message={progressMessage}
+                  />
+                </div>
+              )}
+              {isLoading && !progressStage && (
                 <ChatMessage role="assistant" isLoading={true} />
               )}
               <div ref={messagesEndRef} className="h-4" />

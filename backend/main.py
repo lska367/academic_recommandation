@@ -1,11 +1,13 @@
 
 import os
 import json
+import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from arxiv_crawler import ArxivCrawler
@@ -234,7 +236,7 @@ async def search(request: SearchRequest):
         if request.use_rerank and reranker and len(results) > 1:
             results = reranker.rerank(
                 query=request.query,
-                results=results,
+                candidates=results,
                 top_k=request.top_k
             )
         elif request.top_k:
@@ -252,28 +254,32 @@ async def search(request: SearchRequest):
 
 @app.post("/api/report")
 async def generate_report(request: ReportRequest):
-    if not retrieval or not report_generator:
-        raise HTTPException(status_code=500, detail="Required services not initialized")
-    
+    if not retrieval:
+        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
+
+    if not report_generator:
+        raise HTTPException(status_code=500, detail="Report generator service not initialized")
+
     try:
         search_results = retrieval.search(
             query=request.topic,
             n_results=request.n_results
         )
-        
+
         if not search_results:
             return {
                 "success": False,
                 "error": "No relevant papers found for this topic"
             }
-        
+
         report_result = report_generator.generate_report(
             topic=request.topic,
             search_results=search_results
         )
-        
+
         return report_result
     except Exception as e:
+        print(f"Error in /api/report: {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -427,7 +433,7 @@ async def build_index():
 async def clear_index():
     if not retrieval:
         raise HTTPException(status_code=500, detail="Retrieval service not initialized")
-    
+
     try:
         retrieval.clear_index()
         return {
@@ -436,6 +442,118 @@ async def clear_index():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def sse_progress_generator(progress_events):
+    for event in progress_events:
+        yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+    yield f"data: {json.dumps({'event': 'done', 'data': {}}, ensure_ascii=False)}\n\n"
+
+
+@app.post("/api/search/stream")
+async def search_with_progress(request: SearchRequest):
+    if not retrieval:
+        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
+
+    async def event_generator():
+        progress_events = []
+
+        def progress_callback(stage: str, message: str, extra_data: Dict[str, Any]):
+            progress_events.append({
+                "stage": stage,
+                "message": message,
+                **extra_data
+            })
+
+        try:
+            results = retrieval.search(
+                query=request.query,
+                n_results=request.n_results,
+                progress_callback=progress_callback
+            )
+
+            if request.use_rerank and reranker and len(results) > 1:
+                for event in progress_events:
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                progress_events.clear()
+
+                reranker_progress = []
+                def rerank_callback(stage: str, message: str, extra_data: Dict[str, Any]):
+                    reranker_progress.append({
+                        "stage": stage,
+                        "message": message,
+                        **extra_data
+                    })
+
+                results = reranker.rerank(
+                    query=request.query,
+                    candidates=results,
+                    top_k=request.top_k,
+                    progress_callback=rerank_callback
+                )
+
+                for event in reranker_progress:
+                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            elif request.top_k:
+                results = results[:request.top_k]
+
+            for event in progress_events:
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+            yield f"data: {json.dumps({'event': 'search_complete', 'success': True, 'query': request.query, 'total_results': len(results), 'results': results}, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'event': 'error', 'success': False, 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@app.post("/api/report/stream")
+async def generate_report_with_progress(request: ReportRequest):
+    if not retrieval:
+        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
+
+    if not report_generator:
+        raise HTTPException(status_code=500, detail="Report generator service not initialized")
+
+    async def event_generator():
+        try:
+            search_results = retrieval.search(
+                query=request.topic,
+                n_results=request.n_results
+            )
+
+            if not search_results:
+                yield f"data: {json.dumps({'event': 'report_error', 'success': False, 'error': 'No relevant papers found for this topic'}, ensure_ascii=False)}\n\n"
+                return
+
+            for event_data in report_generator.generate_report_stream(
+                topic=request.topic,
+                search_results=search_results
+            ):
+                yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            print(f"Error in /api/report/stream: {type(e).__name__}: {e}")
+            yield f"data: {json.dumps({'event': 'report_error', 'success': False, 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 if __name__ == "__main__":

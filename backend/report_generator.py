@@ -1,7 +1,7 @@
 
 import os
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Generator
 from dotenv import load_dotenv
 from openai import OpenAI
 from datetime import datetime
@@ -67,7 +67,6 @@ class ReportGenerator:
 标题: {paper['title']}
 作者: {paper['authors']}
 摘要: {paper['summary']}
-arXiv链接: {paper['arxiv_url']}
 关键内容: {chunks_text}
 
 """
@@ -96,7 +95,6 @@ arXiv链接: {paper['arxiv_url']}
 - 核心研究问题
 - 主要技术方法
 - 代表性研究工作
-- 在论述中引用相关论文，如[1]、[2]等
 
 ## 3. 关键技术与方法
 详细介绍推荐论文中提到的主要技术和方法，包括:
@@ -118,17 +116,12 @@ arXiv链接: {paper['arxiv_url']}
 ## 7. 总结
 对整个报告进行总结，强调该领域的重要性和未来发展前景。
 
-## 参考文献
-列出本次报告所参考的论文，格式为:
-[序号] 作者. 标题. arXiv链接.
-
 报告撰写要求:
 1. 内容详实，逻辑清晰
 2. 基于提供的论文内容，不要编造未提及的信息
 3. 语言专业、准确、流畅
 4. 总字数控制在3000-5000字
 5. 生成时间: {current_date}
-6. 务必在正文中适当引用论文，如[1]、[2]等
 
 请直接输出完整的学术报告，无需额外说明。"""
 
@@ -197,14 +190,11 @@ arXiv链接: {paper['arxiv_url']}
 
             report_content = response.choices[0].message.content
 
-            citation_stats = self._validate_citations(report_content, paper_info)
-
             return {
                 "success": True,
                 "topic": topic,
                 "report_content": report_content,
                 "paper_info": paper_info,
-                "citation_stats": citation_stats,
                 "generated_at": datetime.now().isoformat()
             }
 
@@ -212,6 +202,87 @@ arXiv链接: {paper['arxiv_url']}
             return {
                 "success": False,
                 "error": f"Failed to generate report: {str(e)}"
+            }
+
+    def generate_report_stream(
+        self,
+        topic: str,
+        search_results: List[Dict[str, Any]]
+    ) -> Generator[Dict[str, Any], None, None]:
+        if not search_results:
+            yield {
+                "event": "report_error",
+                "data": {"success": False, "error": "No search results provided"}
+            }
+            return
+
+        paper_info = self._aggregate_paper_info(search_results)
+
+        if paper_info["total_papers"] == 0:
+            yield {
+                "event": "report_error",
+                "data": {"success": False, "error": "No valid papers found in search results"}
+            }
+            return
+
+        yield {
+            "event": "report_start",
+            "data": {
+                "stage": "report_start",
+                "message": f"开始生成关于「{topic}」的学术综述",
+                "total_papers": paper_info["total_papers"]
+            }
+        }
+
+        prompt = self._build_report_prompt(topic, paper_info)
+
+        try:
+            yield {
+                "event": "report_content_start",
+                "data": {"stage": "report_content_start", "message": "正在生成报告内容..."}
+            }
+
+            full_content = ""
+
+            stream_response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=4000,
+                stream=True
+            )
+
+            for chunk in stream_response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content_piece = chunk.choices[0].delta.content
+                    full_content += content_piece
+
+                    yield {
+                        "event": "report_chunk",
+                        "data": {
+                            "stage": "report_chunk",
+                            "content": content_piece,
+                            "full_content": full_content
+                        }
+                    }
+
+            yield {
+                "event": "report_complete",
+                "data": {
+                    "stage": "report_complete",
+                    "success": True,
+                    "report_content": full_content,
+                    "paper_info": paper_info,
+                    "generated_at": datetime.now().isoformat()
+                }
+            }
+
+        except Exception as e:
+            yield {
+                "event": "report_error",
+                "data": {"success": False, "error": f"Failed to generate report: {str(e)}"}
             }
 
     def save_report_to_file(self, report_result: Dict[str, Any], output_dir: str = "./reports") -> str:

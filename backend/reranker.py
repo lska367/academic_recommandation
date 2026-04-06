@@ -1,6 +1,7 @@
 
 import os
 import json
+from typing import List, Dict, Any, Optional, Callable
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -78,15 +79,18 @@ class Reranker:
             print(f"解析重排序响应失败: {e}")
             return []
     
-    def rerank(self, query, candidates, top_k=None):
+    def rerank(self, query, candidates, top_k=None, progress_callback=None):
         if not candidates:
             return []
-        
+
         if top_k is None:
             top_k = len(candidates)
-        
+
+        if progress_callback:
+            progress_callback("rerank_start", f"开始对 {len(candidates)} 篇候选论文进行重排序", {"total": len(candidates)})
+
         prompt = self._build_rerank_prompt(query, candidates)
-        
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -103,10 +107,13 @@ class Reranker:
                 temperature=0.3,
                 max_tokens=2000
             )
-            
+
+            if progress_callback:
+                progress_callback("rerank_scoring", "论文打分完成，正在处理结果", {})
+
             response_text = response.choices[0].message.content
             rerank_results = self._parse_rerank_response(response_text)
-            
+
             reranked_candidates = []
             for result in rerank_results:
                 idx = result.get("index", 1) - 1
@@ -115,13 +122,18 @@ class Reranker:
                     candidate["rerank_score"] = result.get("score", 0)
                     candidate["rerank_reason"] = result.get("reason", "")
                     reranked_candidates.append(candidate)
-            
+
             reranked_candidates.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
-            
+
+            if progress_callback:
+                progress_callback("rerank_complete", f"重排序完成，返回 Top {len(reranked_candidates[:top_k])} 篇论文", {"returned": len(reranked_candidates[:top_k])})
+
             return reranked_candidates[:top_k]
-        
+
         except Exception as e:
             print(f"重排序过程出错: {e}")
+            if progress_callback:
+                progress_callback("rerank_error", f"重排序出错: {str(e)}", {})
             return candidates[:top_k]
     
     def aggregate_candidates_by_paper(self, candidates):
