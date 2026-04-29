@@ -1,337 +1,161 @@
 const API_BASE_URL = 'http://localhost:8000';
 
-const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
 export const apiClient = {
-  async searchPapers(query, nResults = 10, useRerank = false) {
-    try {
-      if (isDevelopment) {
-        console.log('[API] Searching papers:', { query, nResults, useRerank });
-      }
+  // ========== 认证相关 ==========
 
-      const response = await fetch(`${API_BASE_URL}/api/search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query,
-          n_results: nResults,
-          use_rerank: useRerank,
-        }),
-      });
-
-      if (isDevelopment) {
-        console.log('[API] Search response status:', response.status, response.statusText);
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (isDevelopment) {
-          console.error('[API] Search error response:', errorText);
-        }
-        throw new Error(`搜索失败: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (isDevelopment) {
-        console.log('[API] Search success:', data);
-      }
-      return data;
-    } catch (error) {
-      if (isDevelopment) {
-        console.error('[API] Search error:', error);
-      }
-      throw error;
-    }
+  async verifyEmail(email) {
+    const response = await fetch(`${API_BASE_URL}/api/auth/verify-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    return response.json();
   },
 
-  searchPapersWithProgress(query, nResults = 10, useRerank = true, topK = null, onProgress = null) {
+  // ========== 聊天核心 ==========
+
+  sendChatMessage(message, userId, conversationId, onProgress) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       let buffer = '';
       let isCompleted = false;
 
-      const cleanup = () => {
-        if (isCompleted) return;
-        isCompleted = true;
-      };
+      const cleanup = () => { if (isCompleted) return; isCompleted = true; };
 
       const processLine = (line) => {
         if (!line.startsWith('data: ')) return;
-
         try {
-          const jsonStr = line.slice(6).trim();
-          if (!jsonStr) return;
-
-          const data = JSON.parse(jsonStr);
-
+          const data = JSON.parse(line.slice(6).trim());
+          
+          if (data.event === 'chat_complete') {
+            cleanup();
+            resolve(data.data);
+            return;
+          }
           if (data.event === 'error') {
             cleanup();
-            reject(new Error(data.error || '检索失败'));
+            reject(new Error(data.error));
             return;
           }
-
-          if (data.event === 'search_complete') {
-            cleanup();
-            resolve({
-              success: true,
-              query: data.query,
-              total_results: data.total_results,
-              results: data.results || [],
-            });
-            return;
-          }
-
-          if (onProgress && typeof onProgress === 'function') {
-            onProgress({ type: 'progress', data });
-          }
-        } catch (e) {
-          if (isDevelopment) {
-            console.warn('[SSE] Parse warning (may be incomplete):', e.message);
-          }
-        }
+          if (onProgress) onProgress(data);
+        } catch (e) { /* ignore parse errors */ }
       };
 
-      xhr.open('POST', `${API_BASE_URL}/api/search/stream`, true);
+      xhr.open('POST', `${API_BASE_URL}/api/chat/stream`, true);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.responseType = 'text';
 
       xhr.onprogress = (event) => {
         if (isCompleted) return;
-
-        const newText = event.target.responseText;
-        if (!newText) return;
-
-        buffer = newText;
-
+        buffer = event.target.responseText || '';
         const lines = buffer.split('\n');
-        const completeLines = lines.slice(0, -1);
-
-        for (const line of completeLines) {
-          if (line.trim()) {
-            processLine(line.trim());
-          }
+        for (const line of lines.slice(0, -1)) {
+          if (line.trim()) processLine(line.trim());
           if (isCompleted) break;
         }
       };
 
       xhr.onload = () => {
         if (isCompleted) return;
-
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const remainingText = buffer;
-          if (remainingText.trim()) {
-            const lines = remainingText.split('\n');
-            for (const line of lines) {
-              if (line.trim()) {
-                processLine(line.trim());
-              }
-              if (isCompleted) break;
-            }
-          }
-
-          if (!isCompleted) {
-            cleanup();
-            reject(new Error('检索完成但未收到结果'));
-          }
-        } else {
-          cleanup();
-          reject(new Error(`请求失败: ${xhr.status}`));
+        const remainingText = buffer || '';
+        if (remainingText.trim()) {
+          remainingText.split('\n').forEach(line => {
+            if (line.trim()) processLine(line.trim());
+            if (isCompleted) return;
+          });
         }
+        if (!isCompleted) cleanup(), reject(new Error('响应不完整'));
       };
 
-      xhr.onerror = () => {
-        cleanup();
-        reject(new Error('网络连接失败'));
-      };
-
-      xhr.onabort = () => {
-        cleanup();
-        reject(new Error('请求已取消'));
-      };
+      xhr.onerror = () => cleanup(), reject(new Error('网络错误'));
+      xhr.onabort = () => cleanup(), reject(new Error('请求已取消'));
 
       xhr.send(JSON.stringify({
-        query,
-        n_results: nResults,
-        use_rerank: useRerank,
-        top_k: topK,
+        message,
+        user_id: userId,
+        conversation_id: conversationId
       }));
     });
   },
 
-  async generateSurvey(topic, nResults = 15) {
-    try {
-      if (isDevelopment) {
-        console.log('[API] Generating survey:', topic);
-      }
+  // ========== 用户管理 ==========
 
-      const response = await fetch(`${API_BASE_URL}/api/report`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          topic,
-          n_results: nResults,
-        }),
-      });
-
-      if (isDevelopment) {
-        console.log('[API] Report response status:', response.status, response.statusText);
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (isDevelopment) {
-          console.error('[API] Report error response:', errorText);
-        }
-        throw new Error(`生成综述失败: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (isDevelopment) {
-        console.log('[API] Report success:', data);
-      }
-      return data;
-    } catch (error) {
-      if (isDevelopment) {
-        console.error('[API] Report error:', error);
-      }
-      throw error;
-    }
+  async getUserProfile(userId) {
+    const response = await fetch(`${API_BASE_URL}/api/user/profile/${userId}`);
+    return response.json();
   },
 
-  generateSurveyWithProgress(topic, nResults = 15, onProgress = null) {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      let buffer = '';
-      let isCompleted = false;
+  async getConversations(userId, limit = 20) {
+    const response = await fetch(`${API_BASE_URL}/api/user/conversations/${userId}?limit=${limit}`);
+    return response.json();
+  },
 
-      const cleanup = () => {
-        if (isCompleted) return;
-        isCompleted = true;
-      };
-
-      const processLine = (line) => {
-        if (!line.startsWith('data: ')) return;
-
-        try {
-          const jsonStr = line.slice(6).trim();
-          if (!jsonStr) return;
-
-          const data = JSON.parse(jsonStr);
-
-          if (data.event === 'report_error') {
-            cleanup();
-            reject(new Error(data.data?.error || '报告生成失败'));
-            return;
-          }
-
-          if (data.event === 'report_complete') {
-            cleanup();
-            resolve({
-              success: true,
-              report_content: data.data?.report_content || '',
-              paper_info: data.data?.paper_info || {},
-              citation_stats: data.data?.citation_stats || {},
-              generated_at: data.data?.generated_at,
-            });
-            return;
-          }
-
-          if (onProgress && typeof onProgress === 'function') {
-            onProgress({
-              type: 'progress',
-              event: data.event,
-              stage: data.data?.stage,
-              content: data.data?.content,
-              fullContent: data.data?.full_content,
-              message: data.data?.message,
-              totalPapers: data.data?.total_papers,
-            });
-          }
-        } catch (e) {
-          if (isDevelopment) {
-            console.warn('[SSE] Parse warning (may be incomplete):', e.message);
-          }
-        }
-      };
-
-      xhr.open('POST', `${API_BASE_URL}/api/report/stream`, true);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.responseType = 'text';
-
-      xhr.onprogress = (event) => {
-        if (isCompleted) return;
-
-        const newText = event.target.responseText;
-        if (!newText) return;
-
-        buffer = newText;
-
-        const lines = buffer.split('\n');
-        const completeLines = lines.slice(0, -1);
-
-        for (const line of completeLines) {
-          if (line.trim()) {
-            processLine(line.trim());
-          }
-          if (isCompleted) break;
-        }
-      };
-
-      xhr.onload = () => {
-        if (isCompleted) return;
-
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const remainingText = buffer;
-          if (remainingText.trim()) {
-            const lines = remainingText.split('\n');
-            for (const line of lines) {
-              if (line.trim()) {
-                processLine(line.trim());
-              }
-              if (isCompleted) break;
-            }
-          }
-
-          if (!isCompleted) {
-            cleanup();
-            reject(new Error('报告生成完成但未收到最终结果'));
-          }
-        } else {
-          cleanup();
-          reject(new Error(`请求失败: ${xhr.status}`));
-        }
-      };
-
-      xhr.onerror = () => {
-        cleanup();
-        reject(new Error('网络连接失败'));
-      };
-
-      xhr.onabort = () => {
-        cleanup();
-        reject(new Error('请求已取消'));
-      };
-
-      xhr.send(JSON.stringify({ topic, n_results: nResults }));
+  async updatePreferences(userId, preferences) {
+    const response = await fetch(`${API_BASE_URL}/api/user/preferences/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preferences }),
     });
+    return response.json();
   },
 
-  async checkHealth() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/health`);
-      if (isDevelopment) {
-        console.log('[API] Health check:', response.ok);
-      }
-      return response.ok;
-    } catch (error) {
-      if (isDevelopment) {
-        console.error('[API] Health check error:', error);
-      }
-      return false;
-    }
+  // ========== 推荐系统 ==========
+
+  async getPersonalizedRecommendations(userId) {
+    const response = await fetch(`${API_BASE_URL}/api/recommendations/personalized/${userId}`, {
+      method: 'POST',
+    });
+    return response.json();
+  },
+
+  // ========== 邮件服务 ==========
+
+  async getEmailStatus() {
+    const response = await fetch(`${API_BASE_URL}/api/email/status`);
+    return response.json();
+  },
+
+  async testEmail() {
+    const response = await fetch(`${API_BASE_URL}/api/email/test`, { method: 'POST' });
+    return response.json();
+  },
+
+  async sendTestEmail(userId) {
+    const response = await fetch(`${API_BASE_URL}/api/email/send-test/${userId}`, { method: 'POST' });
+    return response.json();
+  },
+
+  // ========== 调度器控制 ==========
+
+  async getSchedulerStatus() {
+    const response = await fetch(`${API_BASE_URL}/api/scheduler/status`);
+    return response.json();
+  },
+
+  async startScheduler() {
+    const response = await fetch(`${API_BASE_URL}/api/scheduler/start`, { method: 'POST' });
+    return response.json();
+  },
+
+  async stopScheduler() {
+    const response = await fetch(`${API_BASE_URL}/api/scheduler/stop`, { method: 'POST' });
+    return response.json();
+  },
+
+  async runPapersNow() {
+    const response = await fetch(`${API_BASE_URL}/api/scheduler/run-papers-now`, { method: 'POST' });
+    return response.json();
+  },
+
+  async runSurveyNow() {
+    const response = await fetch(`${API_BASE_URL}/api/scheduler/run-survey-now`, { method: 'POST' });
+    return response.json();
+  },
+
+  // ========== 系统信息 ==========
+
+  async getSystemStats() {
+    const response = await fetch(`${API_BASE_URL}/api/system/stats`);
+    return response.json();
   },
 };

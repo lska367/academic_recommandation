@@ -1,7 +1,14 @@
+"""
+智能学术助手 v4.0 - 主应用入口
+核心功能：
+1. 邮箱验证与用户管理
+2. AI学术聊天机器人
+3. 智能推荐引擎
+4. 定时邮件推送服务
+"""
 
 import os
 import json
-import asyncio
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
@@ -10,17 +17,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+# 导入核心模块
 from arxiv_crawler import ArxivCrawler
 from pdf_processor import PDFProcessor
 from multimodal_retrieval import MultimodalRetrieval
 from reranker import Reranker
 from report_generator import ReportGenerator
 
+# 导入v4.0新模块
+from user_manager import SecureUserManager
+from intelligence_engine import AcademicIntelligenceEngine
+from email_service import EnhancedEmailService
+from task_scheduler import IntelligentTaskScheduler
+
 
 load_dotenv()
 
-app = FastAPI(title="Academic Recommendation API", version="1.0.0")
+app = FastAPI(
+    title="智能学术助手 API",
+    version="4.0.0",
+    description="基于邮箱验证的AI学术聊天助手系统"
+)
 
+# CORS配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,481 +48,406 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 全局服务实例
 retrieval = None
 reranker = None
 report_generator = None
 crawler = None
 pdf_processor = None
 
+# v4.0 核心服务
+user_manager = None
+intelligence_engine = None
+email_service = None
+task_scheduler = None
+
 
 def init_services():
+    """初始化所有服务模块"""
     global retrieval, reranker, report_generator, crawler, pdf_processor
+    global user_manager, intelligence_engine, email_service, task_scheduler
     
+    print("\n" + "="*60)
+    print("🚀 初始化智能学术助手 v4.0 服务")
+    print("="*60 + "\n")
+
+    # 基础检索服务
     try:
         retrieval = MultimodalRetrieval()
-        print("✅ MultimodalRetrieval initialized")
+        print("✅ 多模态检索服务就绪")
     except Exception as e:
-        print(f"⚠️  MultimodalRetrieval initialization error: {e}")
-    
+        print(f"⚠️  检索服务初始化异常: {e}")
+
     try:
         reranker = Reranker()
-        print("✅ Reranker initialized")
+        print("✅ 重排序服务就绪")
     except Exception as e:
-        print(f"⚠️  Reranker initialization error: {e}")
-    
+        print(f"⚠️  重排序服务初始化异常: {e}")
+
     try:
         report_generator = ReportGenerator()
-        print("✅ ReportGenerator initialized")
+        print("✅ 报告生成服务就绪")
     except Exception as e:
-        print(f"⚠️  ReportGenerator initialization error: {e}")
-    
+        print(f"⚠️  报告生成服务初始化异常: {e}")
+
+    # 数据准备服务（保留历史数据）
     try:
         crawler = ArxivCrawler()
-        print("✅ ArxivCrawler initialized")
-    except Exception as e:
-        print(f"⚠️  ArxivCrawler initialization error: {e}")
-    
-    try:
         pdf_processor = PDFProcessor()
-        print("✅ PDFProcessor initialized")
+        print("✅ 数据处理服务就绪")
+        
+        _ensure_data_ready()
     except Exception as e:
-        print(f"⚠️  PDFProcessor initialization error: {e}")
+        print(f"⚠️  数据处理服务初始化异常: {e}")
+
+    # v4.0 核心服务
+    try:
+        user_manager = SecureUserManager("./secure_data/users")
+        print("✅ 安全用户管理系统就绪")
+    except Exception as e:
+        print(f"❌ 用户管理系统初始化失败: {e}")
+
+    try:
+        intelligence_engine = AcademicIntelligenceEngine(
+            retrieval=retrieval,
+            reranker=reranker,
+            report_generator=report_generator
+        )
+        print("✅ 学术智能分析引擎就绪")
+    except Exception as e:
+        print(f"❌ 智能引擎初始化失败: {e}")
+
+    try:
+        email_service = EnhancedEmailService()
+        if email_service.is_configured():
+            print("✅ 邮件通知服务就绪 (已配置)")
+        else:
+            print("⚠️  邮件通知服务 (未配置SMTP)")
+    except Exception as e:
+        print(f"❌ 邮件服务初始化失败: {e}")
+
+    try:
+        task_scheduler = IntelligentTaskScheduler(
+            user_manager=user_manager,
+            intelligence_engine=intelligence_engine,
+            email_service=email_service,
+            retrieval=retrieval,
+            reranker=reranker,
+            report_generator=report_generator
+        )
+        print("✅ 智能任务调度器就绪")
+    except Exception as e:
+        print(f"❌ 调度器初始化失败: {e}")
+
+    print("\n" + "="*60)
+    print("✨ 所有服务初始化完成！")
+    print("="*60 + "\n")
 
 
-def ensure_sufficient_data(target_count: int = 50):
-    api_key = os.getenv("VOLCENGINE_API_KEY")
-    has_valid_api_key = api_key and api_key != "your_api_key_here"
-    
+def _ensure_data_ready(target_count: int = 50):
+    """确保有足够的历史数据可用"""
     data_dir = Path(os.getenv("DATA_DIR", "./data"))
-    pdf_dir = data_dir / "pdfs"
-    processed_dir = data_dir / "processed"
     metadata_file = data_dir / "metadata.json"
     
-    print("\n" + "=" * 60)
-    print("📊 Checking data status...")
-    print("=" * 60)
-    
-    metadata_count = 0
     if metadata_file.exists():
         try:
-            with open(metadata_file, "r", encoding="utf-8") as f:
+            with open(metadata_file, 'r', encoding='utf-8') as f:
                 metadata = json.load(f)
-                metadata_count = len(metadata)
+            
+            if len(metadata) >= target_count:
+                print(f"\n📊 发现 {len(metadata)} 条已处理的论文数据")
+                return True
         except:
             pass
     
-    pdf_count = 0
-    if pdf_dir.exists():
-        pdf_count = len(list(pdf_dir.glob("*.pdf")))
-    
-    processed_count = 0
-    if processed_dir.exists():
-        processed_count = len(list(processed_dir.glob("*_processed.json")))
-    
-    index_count = 0
-    if retrieval and has_valid_api_key:
-        try:
-            index_stats = retrieval.get_index_stats()
-            index_count = index_stats.get("count", 0)
-        except:
-            pass
-    
-    print(f"📄 Metadata papers: {metadata_count}")
-    print(f"📚 PDF files: {pdf_count}")
-    print(f"✂️  Processed papers: {processed_count}")
-    print(f"🔍 Indexed chunks: {index_count}")
-    print(f"🔑 API key configured: {'Yes' if has_valid_api_key else 'No'}")
-    
-    if metadata_count >= target_count and processed_count >= target_count:
-        if has_valid_api_key and index_count > 0:
-            print(f"\n✅ Data check passed! Already have sufficient data and index.")
-            return True
-        elif not has_valid_api_key:
-            print(f"\n⚠️  Data check passed (papers and PDFs ready), but API key not configured for indexing.")
-            print(f"   Run 'python prepare_data.py' after setting API key to build index.")
-            return True
-    
-    print(f"\n⚠️  Insufficient data. Starting data pipeline...")
-    
-    if not crawler or not pdf_processor:
-        print("❌ Required services not initialized")
-        return False
-    
-    try:
-        print("\n" + "=" * 60)
-        print("📥 Step 1: Crawling papers from arXiv")
-        print("=" * 60)
-        papers = crawler.run(target_count=target_count)
-        
-        if not papers:
-            print("❌ No papers crawled")
-            return False
-        
-        print(f"\n✅ Crawled {len(papers)} papers")
-        
-        print("\n" + "=" * 60)
-        print("📄 Step 2: Processing PDF files")
-        print("=" * 60)
-        processed_papers = pdf_processor.process_all_papers(papers)
-        
-        if not processed_papers:
-            print("❌ No papers processed")
-            return False
-        
-        print(f"\n✅ Processed {len(processed_papers)} papers")
-        
-        if has_valid_api_key and retrieval:
-            print("\n" + "=" * 60)
-            print("🔍 Step 3: Encoding and indexing papers")
-            print("=" * 60)
+    print("\n📦 正在准备论文数据...")
+    papers = crawler.run(target_count=target_count)
+    if papers:
+        processed = pdf_processor.process_all_papers(papers)
+        if processed and retrieval:
             try:
-                total_chunks = retrieval.encode_and_index_all_processed()
-                print(f"\n✅ Indexed {total_chunks} chunks")
-            except Exception as e:
-                print(f"\n⚠️  Indexing skipped due to error: {e}")
-                print(f"   You can run 'python prepare_data.py' later to build index.")
-        else:
-            print(f"\n⚠️  Skipping indexing step (API key not configured)")
-            print(f"   Run 'python prepare_data.py' after setting API key to build index.")
-        
-        print("\n" + "=" * 60)
-        print("✅ Data pipeline completed successfully!")
-        print("=" * 60)
-        
+                retrieval.encode_and_index_all_processed()
+            except:
+                pass
         return True
-        
-    except Exception as e:
-        print(f"❌ Data pipeline failed: {e}")
-        return False
+    return False
 
 
 @app.on_event("startup")
 async def startup_event():
+    """应用启动时执行"""
     init_services()
-    target_count = int(os.getenv("TARGET_PAPER_COUNT", 50))
-    ensure_sufficient_data(target_count)
+    
+    # 启动调度器
+    if task_scheduler:
+        task_scheduler.start()
 
 
-class SearchRequest(BaseModel):
-    query: str
-    n_results: int = 10
-    use_rerank: bool = True
-    top_k: Optional[int] = None
+# ========== 数据模型 ==========
+
+class EmailVerificationRequest(BaseModel):
+    email: str
+
+class ChatMessageRequest(BaseModel):
+    message: str
+    user_id: str
+    conversation_id: Optional[str] = None
+
+class PreferencesUpdateRequest(BaseModel):
+    preferences: Dict[str, Any]
 
 
-class ReportRequest(BaseModel):
-    topic: str
-    n_results: int = 15
-
-
-class ConversationRequest(BaseModel):
-    messages: List[Dict[str, str]]
-    use_context: bool = True
-
+# ========== 公开端点 ==========
 
 @app.get("/")
 async def root():
     return {
-        "message": "Academic Recommendation API",
-        "version": "1.0.0",
-        "endpoints": {
-            "health": "/health",
-            "search": "/api/search",
-            "report": "/api/report",
-            "conversation": "/api/conversation",
-            "data/check": "/api/data/check",
-            "index/stats": "/api/index/stats"
+        "service": "智能学术助手",
+        "version": "4.0.0",
+        "description": "基于邮箱验证的AI学术聊天助手",
+        "core_features": [
+            "邮箱验证登录",
+            "AI学术对话机器人",
+            "个性化论文推荐",
+            "定时邮件推送",
+            "自动综述报告"
+        ],
+        "api_endpoints": {
+            "auth": "/api/auth/verify-email",
+            "chat": "/api/chat/stream",
+            "user": "/api/user/*",
+            "recommendations": "/api/recommendations/*",
+            "scheduler": "/api/scheduler/*",
+            "email": "/api/email/*"
         }
     }
 
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    services_status = {
+        "user_manager": user_manager is not None,
+        "intelligence_engine": intelligence_engine is not None,
+        "email_service": email_service is not None,
+        "task_scheduler": task_scheduler is not None,
+        "retrieval": retrieval is not None,
+        "email_configured": email_service.is_configured() if email_service else False
+    }
+    return {"status": "healthy", "services": services_status}
 
 
-@app.post("/api/search")
-async def search(request: SearchRequest):
-    if not retrieval:
-        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
-    
-    try:
-        results = retrieval.search(
-            query=request.query,
-            n_results=request.n_results
-        )
-        
-        if request.use_rerank and reranker and len(results) > 1:
-            results = reranker.rerank(
-                query=request.query,
-                candidates=results,
-                top_k=request.top_k
+# ========== 认证端点 ==========
+
+@app.post("/api/auth/verify-email")
+async def verify_email(request: EmailVerificationRequest):
+    """
+    邮箱验证入口 - 用户首次访问必须调用此接口
+    自动注册新用户或登录已有用户
+    """
+    if not user_manager:
+        raise HTTPException(status_code=500, detail="用户服务未初始化")
+
+    result = user_manager.authenticate_user(request.email)
+
+    if result.get("success"):
+        # 注册为邮件订阅者
+        if email_service:
+            email_service.register_subscriber(
+                user_id=result["user_id"],
+                email=request.email
             )
-        elif request.top_k:
-            results = results[:request.top_k]
-        
+
+        # 创建初始对话
+        conv_id = user_manager.create_conversation(
+            user_id=result["user_id"], 
+            title="首次对话"
+        )
+
         return {
-            "success": True,
-            "query": request.query,
-            "total_results": len(results),
-            "results": results
+            **result,
+            "conversation_id": conv_id,
+            "is_new_user": result.get("message") == "注册成功"
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    raise HTTPException(status_code=400, detail=result.get("error", "验证失败"))
 
 
-@app.post("/api/report")
-async def generate_report(request: ReportRequest):
-    if not retrieval:
-        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
+# ========== 聊天端点（核心） ==========
 
-    if not report_generator:
-        raise HTTPException(status_code=500, detail="Report generator service not initialized")
-
-    try:
-        search_results = retrieval.search(
-            query=request.topic,
-            n_results=request.n_results
-        )
-
-        if not search_results:
-            return {
-                "success": False,
-                "error": "No relevant papers found for this topic"
-            }
-
-        report_result = report_generator.generate_report(
-            topic=request.topic,
-            search_results=search_results
-        )
-
-        return report_result
-    except Exception as e:
-        print(f"Error in /api/report: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/conversation")
-async def conversation(request: ConversationRequest):
-    if not retrieval or not report_generator:
-        raise HTTPException(status_code=500, detail="Required services not initialized")
+@app.post("/api/chat/stream")
+async def chat_stream(request: ChatMessageRequest):
+    """
+    AI学术聊天流式接口
     
-    try:
-        last_message = request.messages[-1] if request.messages else None
-        if not last_message or last_message.get("role") != "user":
-            raise HTTPException(status_code=400, detail="Last message must be from user")
-        
-        user_query = last_message.get("content", "")
-        
-        search_results = []
-        if request.use_context:
-            search_results = retrieval.search(
-                query=user_query,
-                n_results=10
-            )
-        
-        context_text = ""
-        if search_results:
-            papers = {}
-            for result in search_results:
-                metadata = result.get("metadata", {})
-                paper_id = metadata.get("paper_id")
-                if paper_id not in papers:
-                    papers[paper_id] = {
-                        "title": metadata.get("title", ""),
-                        "authors": metadata.get("authors", ""),
-                        "summary": metadata.get("summary", ""),
-                        "chunks": []
-                    }
-                papers[paper_id]["chunks"].append(result.get("document", ""))
-            
-            context_text = "\n\n相关论文信息：\n"
-            for i, (paper_id, paper_info) in enumerate(papers.items(), 1):
-                context_text += f"\n[{i}] {paper_info['title']}\n"
-                context_text += f"    作者: {paper_info['authors']}\n"
-                context_text += f"    摘要: {paper_info['summary']}\n"
-                context_text += f"    关键内容: {' '.join(paper_info['chunks'][:2])}\n"
-        
-        conversation_history = "\n".join([
-            f"{msg.get('role', 'user')}: {msg.get('content', '')}"
-            for msg in request.messages[:-1]
-        ])
-        
-        prompt = f"""你是一位学术研究助手，请根据用户的问题提供专业、准确的回答。
+    功能：
+    - 接收用户消息
+    - 保存到对话历史
+    - 分析用户意图
+    - 检索相关论文
+    - 流式返回智能回复
+    """
+    if not (user_manager and intelligence_engine and report_generator):
+        raise HTTPException(status_code=500, detail="核心服务未就绪")
 
-对话历史：
-{conversation_history}
+    async def event_generator():
+        try:
+            user_id = request.user_id
+            message = request.message
+            
+            # Step 1: 确保对话存在
+            conv_id = request.conversation_id
+            if not conv_id:
+                conv_id = user_manager.create_conversation(user_id, message[:30])
+                yield f"data: {json.dumps({'event': 'conversation_created', 'data': {'conversation_id': conv_id}}, ensure_ascii=False)}\n\n"
+
+            # Step 2: 保存用户消息
+            user_manager.add_message_to_conversation(conv_id, user_id, "user", message)
+            yield f"data: {json.dumps({'event': 'stage', 'stage': 'analyzing', 'message': '正在分析您的问题...'}, ensure_ascii=False)}\n\n"
+
+            # Step 3: 加载对话历史用于上下文理解
+            conversation_history = []
+            conv = user_manager.get_conversation(conv_id, user_id)
+            if conv:
+                conversation_history = conv.get("messages", [])
+
+            # Step 4: 意图分析
+            intent = intelligence_engine.analyze_user_intent(message)
+            yield f"data: {json.dumps({'event': 'intent_detected', 'intent': intent}, ensure_ascii=False)}\n\n"
+
+            # Step 5: 增强查询并检索论文
+            enhanced_query = message
+            if len(conversation_history) > 2 and retrieval:
+                enhancement_result = intelligence_engine.enhance_search_with_context(
+                    original_query=message,
+                    conversation_history=conversation_history[:-1],
+                    n_results=10
+                )
+                if enhancement_result.get("success"):
+                    enhanced_query = enhancement_result["enhanced_query"]
+                    yield f"data: {json.dumps({'event': 'query_enhanced', 'original': message, 'enhanced': enhanced_query}, ensure_ascii=False)}\n\n"
+
+            search_results = []
+            if retrieval:
+                yield f"data: {json.dumps({'event': 'stage', 'stage': 'searching', 'message': '正在检索相关学术论文...'}, ensure_ascii=False)}\n\n"
+                
+                search_results = retrieval.search(query=enhanced_query, n_results=10)
+
+                if search_results and reranker:
+                    yield f"data: {json.dumps({'event': 'stage', 'stage': 'reranking', 'message': '优化排序结果...'}, ensure_ascii=False)}\n\n"
+                    search_results = reranker.rerank(
+                        query=message,
+                        candidates=search_results,
+                        top_k=min(8, len(search_results))
+                    )
+
+            # Step 6: 构建回复上下文
+            context_text = ""
+            if search_results:
+                papers_info = {}
+                for result in search_results[:5]:
+                    metadata = result.get("metadata", {})
+                    pid = metadata.get("paper_id")
+                    if pid not in papers_info:
+                        papers_info[pid] = {
+                            "title": metadata.get("title", ""),
+                            "authors": metadata.get("authors", ""),
+                            "summary": metadata.get("summary", "")
+                        }
+
+                context_text = "\n\n【相关研究文献】\n"
+                for i, (pid, info) in enumerate(list(papers_info.items())[:4], 1):
+                    context_text += f"[{i}] {info['title']}\n作者: {info['authors']}\n摘要: {info['summary'][:200]}...\n"
+
+                yield f"data: {json.dumps({'event': 'papers_found', 'count': len(search_results)}, ensure_ascii=False)}\n\n"
+
+            # Step 7: 构建对话历史文本
+            history_text = "\n".join([
+                f"{m.get('role')}: {m.get('content', '')}"
+                for m in conversation_history[-8:] if m.get('role') in ['user', 'assistant']
+            ])
+
+            # Step 8: 生成智能回复（流式）
+            yield f"data: {json.dumps({'event': 'stage', 'stage': 'generating', 'message': '生成专业回复中...'}, ensure_ascii=False)}\n\n"
+
+            prompt = f"""你是一位专业的学术研究助手，擅长根据用户的研究需求提供精准的学术指导。
+
+{f'【对话上下文】\n{history_text}' if history_text else ''}
 
 {context_text}
 
-用户问题：{user_query}
+【用户当前问题】
+{message}
 
-请根据上述信息回答用户的问题。如果提供了相关论文，请在回答中适当引用。回答要专业、清晰、有帮助。"""
-        
-        response = report_generator.client.chat.completions.create(
-            model=report_generator.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=2000
-        )
-        
-        assistant_response = response.choices[0].message.content
-        
-        return {
-            "success": True,
-            "response": assistant_response,
-            "papers_used": len(search_results) if search_results else 0
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+请提供：
+1. 直接回答用户的问题（2-3句话）
+2. 如果有相关论文，选择最相关的2-3篇进行推荐，说明为什么重要
+3. 给出后续可能的研究方向建议
+4. 使用中文，语言专业但易懂"""
 
-
-@app.get("/api/data/check")
-async def check_data():
-    data_dir = Path(os.getenv("DATA_DIR", "./data"))
-    pdf_dir = data_dir / "pdfs"
-    processed_dir = data_dir / "processed"
-    metadata_file = data_dir / "metadata.json"
-    
-    pdf_count = 0
-    if pdf_dir.exists():
-        pdf_count = len(list(pdf_dir.glob("*.pdf")))
-    
-    processed_count = 0
-    if processed_dir.exists():
-        processed_count = len(list(processed_dir.glob("*_processed.json")))
-    
-    metadata_count = 0
-    if metadata_file.exists():
-        try:
-            with open(metadata_file, "r", encoding="utf-8") as f:
-                metadata = json.load(f)
-                metadata_count = len(metadata)
-        except:
-            pass
-    
-    index_stats = {}
-    if retrieval:
-        try:
-            index_stats = retrieval.get_index_stats()
-        except:
-            pass
-    
-    return {
-        "data_directory": str(data_dir),
-        "metadata_count": metadata_count,
-        "pdf_count": pdf_count,
-        "processed_count": processed_count,
-        "index_stats": index_stats
-    }
-
-
-@app.get("/api/index/stats")
-async def get_index_stats():
-    if not retrieval:
-        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
-    
-    try:
-        stats = retrieval.get_index_stats()
-        return {
-            "success": True,
-            "stats": stats
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/index/build")
-async def build_index():
-    if not retrieval:
-        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
-    
-    try:
-        total_chunks = retrieval.encode_and_index_all_processed()
-        return {
-            "success": True,
-            "total_chunks_indexed": total_chunks
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/index/clear")
-async def clear_index():
-    if not retrieval:
-        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
-
-    try:
-        retrieval.clear_index()
-        return {
-            "success": True,
-            "message": "Index cleared successfully"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-async def sse_progress_generator(progress_events):
-    for event in progress_events:
-        yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-    yield f"data: {json.dumps({'event': 'done', 'data': {}}, ensure_ascii=False)}\n\n"
-
-
-@app.post("/api/search/stream")
-async def search_with_progress(request: SearchRequest):
-    if not retrieval:
-        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
-
-    async def event_generator():
-        progress_events = []
-
-        def progress_callback(stage: str, message: str, extra_data: Dict[str, Any]):
-            progress_events.append({
-                "stage": stage,
-                "message": message,
-                **extra_data
-            })
-
-        try:
-            results = retrieval.search(
-                query=request.query,
-                n_results=request.n_results,
-                progress_callback=progress_callback
+            response = report_generator.client.chat.completions.create(
+                model=report_generator.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.75,
+                max_tokens=2000,
+                stream=True
             )
 
-            if request.use_rerank and reranker and len(results) > 1:
-                for event in progress_events:
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-                progress_events.clear()
+            full_content = ""
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    content_chunk = chunk.choices[0].delta.content
+                    full_content += content_chunk
+                    
+                    yield f"data: {json.dumps({
+                        'event': 'streaming_chunk',
+                        'content': content_chunk,
+                        'fullContent': full_content
+                    }, ensure_ascii=False)}\n\n"
 
-                reranker_progress = []
-                def rerank_callback(stage: str, message: str, extra_data: Dict[str, Any]):
-                    reranker_progress.append({
-                        "stage": stage,
-                        "message": message,
-                        **extra_data
-                    })
+            # Step 9: 保存助手回复
+            user_manager.add_message_to_conversation(conv_id, user_id, "assistant", full_content)
 
-                results = reranker.rerank(
-                    query=request.query,
-                    candidates=results,
-                    top_k=request.top_k,
-                    progress_callback=rerank_callback
-                )
+            # Step 10: 更新用户画像
+            all_user_msgs = [
+                m["content"] for m in conversation_history 
+                if m.get("role") == "user"
+            ]
+            all_user_msgs.append(message)
+            
+            updated_profile = intelligence_engine.build_user_profile([
+                {"role": "user", "content": msg} for msg in all_user_msgs[-30:]
+            ])
 
-                for event in reranker_progress:
-                    yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-            elif request.top_k:
-                results = results[:request.top_k]
+            interests = [item["keyword"] for item in updated_profile.get("primary_interests", [])]
+            domains = [d["domain_name"] for d in updated_profile.get("research_domains", [])]
+            user_manager.update_research_interests(user_id, interests + domains)
 
-            for event in progress_events:
-                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({
+                'event': 'profile_updated',
+                'profile': {
+                    'top_interests': interests[:5],
+                    'domains': domains
+                }
+            }, ensure_ascii=False)}\n\n"
 
-            yield f"data: {json.dumps({'event': 'search_complete', 'success': True, 'query': request.query, 'total_results': len(results), 'results': results}, ensure_ascii=False)}\n\n"
+            # 最终完成事件
+            yield f"data: {json.dumps({
+                'event': 'chat_complete',
+                'data': {
+                    'success': True,
+                    'response': full_content,
+                    'papers_found': len(search_results),
+                    'conversation_id': conv_id,
+                    'user_profile_summary': {
+                        'interests': interests[:3],
+                        'domains': domains
+                    }
+                }
+            }, ensure_ascii=False)}\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'event': 'error', 'success': False, 'error': str(e)}, ensure_ascii=False)}\n\n"
+            print(f"[Chat Error]: {type(e).__name__}: {e}")
+            yield f"data: {json.dumps({'event': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -511,56 +455,213 @@ async def search_with_progress(request: SearchRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*"
         }
     )
 
 
-@app.post("/api/report/stream")
-async def generate_report_with_progress(request: ReportRequest):
-    if not retrieval:
-        raise HTTPException(status_code=500, detail="Retrieval service not initialized")
+# ========== 用户管理端点 ==========
 
-    if not report_generator:
-        raise HTTPException(status_code=500, detail="Report generator service not initialized")
+@app.get("/api/user/profile/{user_id}")
+async def get_user_profile(user_id: str):
+    if not user_manager:
+        raise HTTPException(status_code=500, detail="用户服务未初始化")
+    
+    profile = user_manager.get_user(user_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    return {"success": True, "profile": profile}
 
-    async def event_generator():
-        try:
-            search_results = retrieval.search(
-                query=request.topic,
-                n_results=request.n_results
-            )
 
-            if not search_results:
-                yield f"data: {json.dumps({'event': 'report_error', 'success': False, 'error': 'No relevant papers found for this topic'}, ensure_ascii=False)}\n\n"
-                return
+@app.put("/api/user/preferences/{user_id}")
+async def update_preferences(user_id: str, request: PreferencesUpdateRequest):
+    if not user_manager:
+        raise HTTPException(status_code=500, detail="用户服务未初始化")
+    
+    result = user_manager.update_user_preferences(user_id, request.preferences)
+    return result
 
-            for event_data in report_generator.generate_report_stream(
-                topic=request.topic,
-                search_results=search_results
-            ):
-                yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
 
-        except Exception as e:
-            print(f"Error in /api/report/stream: {type(e).__name__}: {e}")
-            yield f"data: {json.dumps({'event': 'report_error', 'success': False, 'error': str(e)}, ensure_ascii=False)}\n\n"
+@app.get("/api/user/conversations/{user_id}")
+async def get_conversations(user_id: str, limit: int = 20):
+    if not user_manager:
+        raise HTTPException(status_code=500, detail="用户服务未初始化")
+    
+    conversations = user_manager.get_user_conversations(user_id, limit=limit)
+    return {"success": True, "conversations": conversations, "total": len(conversations)}
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
+
+@app.get("/api/user/conversation/{user_id}/{conv_id}")
+async def get_conversation_detail(user_id: str, conv_id: str):
+    if not user_manager:
+        raise HTTPException(status_code=500, detail="用户服务未初始化")
+    
+    conv = user_manager.get_conversation(conv_id, user_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="对话不存在")
+    
+    return {"success": True, "conversation": conv}
+
+
+# ========== 推荐端点 ==========
+
+@app.post("/api/recommendations/personalized/{user_id}")
+async def get_personalized_recommendations(user_id: str):
+    if not (intelligence_engine and user_manager):
+        raise HTTPException(status_code=500, detail="必要服务未初始化")
+
+    # 获取用户对话历史
+    messages = user_manager.get_all_user_messages_for_analysis(user_id)
+    if not messages:
+        raise HTTPException(status_code=400, detail="暂无足够的对话记录")
+
+    conversation_history = [
+        {"role": msg.get("role", "user"), "content": msg.get("content", "")}
+        for msg in messages[-40:]
+    ]
+
+    # 构建用户画像
+    user_profile = intelligence_engine.build_user_profile(conversation_history)
+    
+    # 生成推荐
+    recommendations = intelligence_engine.generate_paper_recommendations(
+        user_profile=user_profile,
+        n_results=10,
+        use_rerank=True
     )
+
+    return recommendations
+
+
+# ========== 邮件服务端点 ==========
+
+@app.get("/api/email/status")
+async def get_email_status():
+    if not email_service:
+        raise HTTPException(status_code=500, detail="邮件服务未初始化")
+    
+    stats = email_service.get_statistics()
+    return {"success": True, **stats}
+
+
+@app.post("/api/email/test")
+async def test_email_connection():
+    if not email_service:
+        raise HTTPException(status_code=500, detail="邮件服务未初始化")
+    
+    return email_service.test_connection()
+
+
+@app.post("/api/email/send-test/{user_id}")
+async def send_test_email(user_id: str):
+    if not (email_service and retrieval):
+        raise HTTPException(status_code=500, detail="必要服务未初始化")
+
+    subscriber = email_service.subscribers.get(user_id)
+    if not subscriber:
+        raise HTTPException(status_code=400, detail="用户未订阅")
+
+    sample_papers = retrieval.search(query="machine learning deep learning research", n_results=3)
+    
+    result = email_service.send_paper_recommendations(
+        to_user_id=user_id,
+        papers=sample_papers,
+        subject="[测试] 智能学术助手 - 测试邮件",
+        custom_message="这是一封测试邮件，验证邮件发送功能是否正常工作。"
+    )
+    
+    return result
+
+
+# ========== 调度器端点 ==========
+
+@app.get("/api/scheduler/status")
+async def get_scheduler_status():
+    if not task_scheduler:
+        raise HTTPException(status_code=500, detail="调度器未初始化")
+    
+    status = task_scheduler.get_status()
+    return {"success": True, **status}
+
+
+@app.post("/api/scheduler/start")
+async def start_scheduler():
+    if not task_scheduler:
+        raise HTTPException(status_code=500, detail="调度器未初始化")
+    return task_scheduler.start()
+
+
+@app.post("/api/scheduler/stop")
+async def stop_scheduler():
+    if not task_scheduler:
+        raise HTTPException(status_code=500, detail="调度器未初始化")
+    return task_scheduler.stop()
+
+
+@app.post("/api/scheduler/run-papers-now")
+async def run_papers_now():
+    if not task_scheduler:
+        raise HTTPException(status_code=500, detail="调度器未初始化")
+    result = await task_scheduler.run_paper_recommendation_now()
+    return result
+
+
+@app.post("/api/scheduler/run-survey-now")
+async def run_survey_now():
+    if not task_scheduler:
+        raise HTTPException(status_code=500, detail="调度器未初始化")
+    result = await task_scheduler.run_survey_report_now()
+    return result
+
+
+@app.put("/api/scheduler/configure")
+async def configure_scheduler(
+    paper_hours: int = Query(168),
+    survey_hours: int = Query(720)
+):
+    if not task_scheduler:
+        raise HTTPException(status_code=500, detail="调度器未初始化")
+    
+    result = task_scheduler.update_intervals(paper_hours, survey_hours)
+    return result
+
+
+# ========== 系统信息端点 ==========
+
+@app.get("/api/system/stats")
+async def get_system_stats():
+    stats = {}
+    
+    if user_manager:
+        stats["users"] = user_manager.get_statistics()
+    
+    if email_service:
+        stats["email"] = email_service.get_statistics()
+    
+    if task_scheduler:
+        scheduler_status = task_scheduler.get_status()
+        stats["scheduler"] = {
+            "is_running": scheduler_status["is_running"],
+            "configured_tasks": scheduler_status["configured_tasks"],
+            "last_executions": scheduler_status["last_executions"]
+        }
+
+    return {"success": True, "timestamp": datetime.now().isoformat(), **stats}
 
 
 if __name__ == "__main__":
+    from datetime import datetime
     import uvicorn
-    
+
     host = os.getenv("BACKEND_HOST", "0.0.0.0")
     port = int(os.getenv("BACKEND_PORT", 8000))
-    
-    print(f"Starting Academic Recommendation API server on {host}:{port}")
+
+    print(f"\n{'='*60}")
+    print(f"🎓 智能学术助手 v4.0")
+    print(f"   基于邮箱验证的AI学术聊天系统")
+    print(f"{'='*60}")
+    print(f"Starting on {host}:{port}\n")
+
     uvicorn.run(app, host=host, port=port)

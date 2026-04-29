@@ -1,0 +1,18 @@
+{
+  "576e8353-75b6-4329-b33e-7652b2c59a89": {
+    "user_id": "576e8353-75b6-4329-b33e-7652b2c59a89",
+    "email_hash": "ad084da1a0fe5b6efbb986d2ffa5bfad4cedd1e649498d98d2b83957f6326082",
+    "email_display": "t******r@example.com",
+    "created_at": "2026-04-29T02:39:17.369520",
+    "last_active": "2026-04-29T02:39:17.371619",
+    "is_verified": true,
+    "preferences": {
+      "frequency": "weekly"
+    },
+    "research_interests": [],
+    "total_conversations": 0,
+    "total_messages": 3,
+    "last_recommendation_sent": null,
+    "last_report_sent": null
+  }
+}

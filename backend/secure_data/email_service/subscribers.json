@@ -1,0 +1,41 @@
+{
+  "test_user_001": {
+    "user_id": "test_user_001",
+    "email": "subscriber@test.com",
+    "registered_at": "2026-04-29T02:39:17.374927",
+    "is_active": false,
+    "preferences": {
+      "frequency": "weekly"
+    },
+    "stats": {
+      "papers_sent": 0,
+      "reports_sent": 0,
+      "total_emails": 0,
+      "last_sent_at": null,
+      "last_paper_sent_at": null,
+      "last_report_sent_at": null
+    },
+    "unsubscribed_at": "2026-04-29T02:39:17.375087"
+  },
+  "test_user_003": {
+    "user_id": "test_user_003",
+    "email": "pref_test@test.com",
+    "registered_at": "2026-04-29T02:39:17.375257",
+    "is_active": true,
+    "preferences": {
+      "paper_recommendations": true,
+      "report_generation": true,
+      "frequency": "weekly",
+      "max_papers_per_email": 5,
+      "include_abstracts": true
+    },
+    "stats": {
+      "papers_sent": 0,
+      "reports_sent": 0,
+      "total_emails": 0,
+      "last_sent_at": null,
+      "last_paper_sent_at": null,
+      "last_report_sent_at": null
+    }
+  }
+}
