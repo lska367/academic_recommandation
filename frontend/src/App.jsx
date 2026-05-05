@@ -21,6 +21,11 @@ function App() {
   const [progressMessage, setProgressMessage] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [conversationPhase, setConversationPhase] = useState('idle');
+  const [sessionId, setSessionId] = useState(null);
+  const [roundCount, setRoundCount] = useState(0);
+  const [requirementSummary, setRequirementSummary] = useState('');
+  const [pendingSearchQuery, setPendingSearchQuery] = useState('');
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = useCallback(() => {
@@ -40,7 +45,7 @@ function App() {
   }, []);
 
   const handleSend = useCallback(async (query, currentMode) => {
-    console.log('[App] handleSend called:', { query, currentMode });
+    console.log('[App] handleSend called:', { query, currentMode, conversationPhase });
     setError(null);
     setProgressStage(null);
     setProgressMessage('');
@@ -49,30 +54,193 @@ function App() {
 
     const userMessage = { role: 'user', content: query };
     setMessages(prev => [...prev, userMessage]);
-    setIsLoading(true);
 
-    try {
-      if (currentMode === 'search') {
-        console.log('[App] Calling searchPapersWithProgress...');
-        setProgressStage('search_start');
-        setProgressMessage('开始检索相关论文...');
+    if (conversationPhase === 'idle') {
+      setConversationPhase('collecting');
+      setPendingSearchQuery(query);
+      setIsLoading(true);
 
-        const response = await apiClient.searchPapersWithProgress(
-          query,
-          10,
-          true,
-          10,
+      try {
+        const messages = [{ role: 'user', content: query }];
+
+        const assistantMessageId = Date.now();
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '',
+          isStreaming: true,
+          streamingContent: '',
+          messageId: assistantMessageId,
+        }]);
+        setIsStreaming(true);
+        setIsLoading(false);
+
+        const response = await apiClient.conversationStream(
+          messages,
+          null,
           (progressData) => {
-            console.log('[App] Search progress:', progressData);
-            if (progressData.data) {
-              setProgressStage(progressData.data.stage);
-              setProgressMessage(progressData.data.message);
+            console.log('[App] Conversation progress:', progressData);
+
+            if (progressData.event === 'session_info' && progressData.sessionId) {
+              setSessionId(progressData.sessionId);
+            }
+
+            if (progressData.event === 'conversation_chunk' && progressData.fullContent) {
+              setMessages(prev => prev.map(msg => {
+                if (msg.messageId === assistantMessageId) {
+                  return { ...msg, streamingContent: progressData.fullContent };
+                }
+                return msg;
+              }));
             }
           }
         );
 
-        console.log('[App] Search response received:', response);
+        console.log('[App] Conversation response:', response);
 
+        if (response.success) {
+          if (response.session_id) {
+            setSessionId(response.session_id);
+          }
+          setRoundCount(response.round_count);
+
+          setMessages(prev => prev.map(msg => {
+            if (msg.messageId === assistantMessageId) {
+              return {
+                ...msg,
+                content: response.response,
+                isStreaming: false,
+                streamingContent: null,
+                readyForSearch: response.ready_for_search,
+              };
+            }
+            return msg;
+          }));
+
+          if (response.ready_for_search && response.requirement_summary) {
+            setRequirementSummary(response.requirement_summary);
+            setConversationPhase('ready');
+          }
+        } else {
+          throw new Error(response.error || '对话失败');
+        }
+      } catch (err) {
+        console.error('[App] Error in conversation:', err);
+        const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        setError(errorMsg);
+        setConversationPhase('idle');
+      } finally {
+        setIsLoading(false);
+        setIsStreaming(false);
+        setStreamingContent('');
+      }
+    } else if (conversationPhase === 'collecting') {
+      setIsLoading(true);
+
+      try {
+        const allMessages = [...messages.filter(m => !m.isStreaming && !m.messageId), userMessage]
+          .map(m => ({ role: m.role, content: m.content }));
+
+        const assistantMessageId = Date.now();
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: '',
+          isStreaming: true,
+          streamingContent: '',
+          messageId: assistantMessageId,
+        }]);
+        setIsStreaming(true);
+        setIsLoading(false);
+
+        const response = await apiClient.conversationStream(
+          allMessages,
+          sessionId,
+          (progressData) => {
+            console.log('[App] Conversation progress:', progressData);
+
+            if (progressData.event === 'session_info' && progressData.sessionId) {
+              setSessionId(progressData.sessionId);
+            }
+
+            if (progressData.event === 'conversation_chunk' && progressData.fullContent) {
+              setMessages(prev => prev.map(msg => {
+                if (msg.messageId === assistantMessageId) {
+                  return { ...msg, streamingContent: progressData.fullContent };
+                }
+                return msg;
+              }));
+            }
+          }
+        );
+
+        if (response.success) {
+          if (response.session_id) {
+            setSessionId(response.session_id);
+          }
+          setRoundCount(response.round_count);
+
+          setMessages(prev => prev.map(msg => {
+            if (msg.messageId === assistantMessageId) {
+              return {
+                ...msg,
+                content: response.response,
+                isStreaming: false,
+                streamingContent: null,
+                readyForSearch: response.ready_for_search,
+              };
+            }
+            return msg;
+          }));
+
+          if (response.ready_for_search && response.requirement_summary) {
+            setRequirementSummary(response.requirement_summary);
+            setConversationPhase('ready');
+          }
+        } else {
+          throw new Error(response.error || '对话失败');
+        }
+      } catch (err) {
+        console.error('[App] Error in conversation:', err);
+        const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        setError(errorMsg);
+      } finally {
+        setIsLoading(false);
+        setIsStreaming(false);
+        setStreamingContent('');
+      }
+    }
+  }, [conversationPhase, sessionId, messages]);
+
+  const handleStartSearch = useCallback(() => {
+    const query = pendingSearchQuery;
+    setConversationPhase('searching');
+
+    setMessages(prev => {
+      const lastAssistant = [...prev].reverse().find(m => m.role === 'assistant' && m.readyForSearch);
+      if (lastAssistant) {
+        return prev.map(m => m === lastAssistant ? { ...m, readyForSearch: false } : m);
+      }
+      return prev;
+    });
+
+    if (mode === 'search') {
+      setIsLoading(true);
+      setProgressStage('search_start');
+      setProgressMessage('开始检索相关论文...');
+
+      apiClient.searchPapersWithProgress(
+        query,
+        10,
+        true,
+        10,
+        (progressData) => {
+          console.log('[App] Search progress:', progressData);
+          if (progressData.data) {
+            setProgressStage(progressData.data.stage);
+            setProgressMessage(progressData.data.message);
+          }
+        },
+        requirementSummary
+      ).then(response => {
         setProgressStage(null);
         setProgressMessage('');
 
@@ -87,7 +255,147 @@ function App() {
             }
           }
 
-          console.log('[App] Unique papers:', uniquePapers.length);
+          const assistantMessage = {
+            role: 'assistant',
+            content: `找到 ${uniquePapers.length} 篇相关论文：`,
+            papers: uniquePapers,
+          };
+          setMessages(prev => [...prev, assistantMessage]);
+        } else {
+          throw new Error(response.error || '检索失败');
+        }
+      }).catch(err => {
+        console.error('[App] Error in search:', err);
+        const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        setError(errorMsg);
+      }).finally(() => {
+        setIsLoading(false);
+        setProgressStage(null);
+        setProgressMessage('');
+        setConversationPhase('idle');
+        setSessionId(null);
+        setRoundCount(0);
+        setRequirementSummary('');
+        setPendingSearchQuery('');
+      });
+    } else {
+      setIsLoading(true);
+      setProgressStage('report_start');
+      setProgressMessage('正在检索相关论文并生成综述...');
+
+      const assistantMessageId = Date.now();
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '',
+        isStreaming: true,
+        streamingContent: '',
+        messageId: assistantMessageId,
+      }]);
+      setIsStreaming(true);
+      setIsLoading(false);
+
+      apiClient.generateSurveyWithProgress(
+        query,
+        15,
+        (progressData) => {
+          if (progressData.stage === 'report_start' || progressData.stage === 'report_content_start') {
+            setProgressStage(progressData.stage);
+            setProgressMessage(progressData.message || '正在生成报告...');
+          }
+
+          if (progressData.event === 'report_chunk' && progressData.fullContent) {
+            setMessages(prev => prev.map(msg => {
+              if (msg.messageId === assistantMessageId) {
+                return { ...msg, streamingContent: progressData.fullContent };
+              }
+              return msg;
+            }));
+          }
+        },
+        requirementSummary
+      ).then(response => {
+        if (response.success) {
+          setMessages(prev => prev.map(msg => {
+            if (msg.messageId === assistantMessageId) {
+              return {
+                ...msg,
+                content: response.report_content,
+                papers: response.paper_info?.papers || [],
+                isStreaming: false,
+                streamingContent: null,
+              };
+            }
+            return msg;
+          }));
+        } else {
+          throw new Error(response.error || '生成综述失败');
+        }
+      }).catch(err => {
+        console.error('[App] Error in survey:', err);
+        setMessages(prev => prev.filter(msg => msg.messageId !== assistantMessageId));
+        const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        setError(errorMsg);
+      }).finally(() => {
+        setProgressStage(null);
+        setProgressMessage('');
+        setIsStreaming(false);
+        setStreamingContent('');
+        setConversationPhase('idle');
+        setSessionId(null);
+        setRoundCount(0);
+        setRequirementSummary('');
+        setPendingSearchQuery('');
+      });
+    }
+  }, [mode, pendingSearchQuery, requirementSummary]);
+
+  const handleSkipToSearch = useCallback((query, targetMode) => {
+    setConversationPhase('idle');
+    setSessionId(null);
+    setRoundCount(0);
+    setRequirementSummary('');
+    setPendingSearchQuery('');
+    setMode(targetMode);
+
+    setError(null);
+    setProgressStage(null);
+    setProgressMessage('');
+    setStreamingContent('');
+    setIsStreaming(false);
+
+    const userMessage = { role: 'user', content: query };
+    setMessages(prev => [...prev, userMessage]);
+    setIsLoading(true);
+
+    if (targetMode === 'search') {
+      setProgressStage('search_start');
+      setProgressMessage('开始检索相关论文...');
+
+      apiClient.searchPapersWithProgress(
+        query,
+        10,
+        true,
+        10,
+        (progressData) => {
+          if (progressData.data) {
+            setProgressStage(progressData.data.stage);
+            setProgressMessage(progressData.data.message);
+          }
+        }
+      ).then(response => {
+        setProgressStage(null);
+        setProgressMessage('');
+
+        if (response.success) {
+          const uniquePapers = [];
+          const seenPaperIds = new Set();
+          for (const result of response.results || []) {
+            const paperId = result.metadata?.paper_id;
+            if (!seenPaperIds.has(paperId)) {
+              seenPaperIds.add(paperId);
+              uniquePapers.push(result);
+            }
+          }
 
           const assistantMessage = {
             role: 'assistant',
@@ -98,94 +406,82 @@ function App() {
         } else {
           throw new Error(response.error || '检索失败');
         }
-      } else {
-        console.log('[App] Calling generateSurveyWithProgress...');
-
-        setProgressStage('report_start');
-        setProgressMessage('正在检索相关论文并生成综述...');
-
-        const assistantMessageId = Date.now();
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: '',
-          isStreaming: true,
-          streamingContent: '',
-          messageId: assistantMessageId,
-        }]);
-
-        setIsStreaming(true);
+      }).catch(err => {
+        console.error('[App] Error in skip search:', err);
+        const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        setError(errorMsg);
+      }).finally(() => {
         setIsLoading(false);
+        setProgressStage(null);
+        setProgressMessage('');
+      });
+    } else {
+      setProgressStage('report_start');
+      setProgressMessage('正在检索相关论文并生成综述...');
 
-        try {
-          const response = await apiClient.generateSurveyWithProgress(
-            query,
-            15,
-            (progressData) => {
-              console.log('[App] Survey progress:', progressData);
+      const assistantMessageId = Date.now();
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: '',
+        isStreaming: true,
+        streamingContent: '',
+        messageId: assistantMessageId,
+      }]);
+      setIsStreaming(true);
+      setIsLoading(false);
 
-              if (progressData.stage === 'report_start' || progressData.stage === 'report_content_start') {
-                setProgressStage(progressData.stage);
-                setProgressMessage(progressData.message || '正在生成报告...');
-              }
+      apiClient.generateSurveyWithProgress(
+        query,
+        15,
+        (progressData) => {
+          if (progressData.stage === 'report_start' || progressData.stage === 'report_content_start') {
+            setProgressStage(progressData.stage);
+            setProgressMessage(progressData.message || '正在生成报告...');
+          }
 
-              if (progressData.event === 'report_chunk' && progressData.fullContent) {
-                setMessages(prev => prev.map(msg => {
-                  if (msg.messageId === assistantMessageId) {
-                    return {
-                      ...msg,
-                      streamingContent: progressData.fullContent,
-                    };
-                  }
-                  return msg;
-                }));
-              }
-            }
-          );
-
-          console.log('[App] Survey response received:', response);
-
-          if (response.success) {
+          if (progressData.event === 'report_chunk' && progressData.fullContent) {
             setMessages(prev => prev.map(msg => {
               if (msg.messageId === assistantMessageId) {
-                return {
-                  ...msg,
-                  content: response.report_content,
-                  papers: response.paper_info?.papers || [],
-                  isStreaming: false,
-                  streamingContent: null,
-                };
+                return { ...msg, streamingContent: progressData.fullContent };
               }
               return msg;
             }));
-          } else {
-            throw new Error(response.error || '生成综述失败');
           }
-        } catch (err) {
-          setMessages(prev => prev.filter(msg => msg.messageId !== assistantMessageId));
-          throw err;
-        } finally {
-          setProgressStage(null);
-          setProgressMessage('');
-          setIsStreaming(false);
-          setStreamingContent('');
         }
-      }
-    } catch (err) {
-      console.error('[App] Error in handleSend:', err);
-      const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      setError(errorMsg);
-    } finally {
-      setIsLoading(false);
-      setProgressStage(null);
-      setProgressMessage('');
-      setIsStreaming(false);
+      ).then(response => {
+        if (response.success) {
+          setMessages(prev => prev.map(msg => {
+            if (msg.messageId === assistantMessageId) {
+              return {
+                ...msg,
+                content: response.report_content,
+                papers: response.paper_info?.papers || [],
+                isStreaming: false,
+                streamingContent: null,
+              };
+            }
+            return msg;
+          }));
+        } else {
+          throw new Error(response.error || '生成综述失败');
+        }
+      }).catch(err => {
+        console.error('[App] Error in skip survey:', err);
+        setMessages(prev => prev.filter(msg => msg.messageId !== assistantMessageId));
+        const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        setError(errorMsg);
+      }).finally(() => {
+        setProgressStage(null);
+        setProgressMessage('');
+        setIsStreaming(false);
+        setStreamingContent('');
+      });
     }
   }, []);
 
   const handleQuickSearch = useCallback((query, targetMode) => {
-    setMode(targetMode);
-    handleSend(query, targetMode);
-  }, [handleSend]);
+    handleSkipToSearch(query, targetMode);
+  }, [handleSkipToSearch]);
 
   const currentModeConfig = MODE_CONFIG[mode];
 
@@ -267,7 +563,7 @@ function App() {
               
               <div className="grid gap-4 w-full max-w-2xl">
                 <button
-                  onClick={() => handleQuickSearch('深度学习在计算机视觉中的应用', 'search')}
+                  onClick={() => handleSend('深度学习在计算机视觉中的应用', 'search')}
                   className="group text-left p-5 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-purple-300 dark:hover:border-purple-700/50 hover:shadow-xl hover:shadow-purple-500/5 transition-all duration-300"
                 >
                   <div className="flex items-start gap-4">
@@ -286,7 +582,7 @@ function App() {
                 </button>
                 
                 <button
-                  onClick={() => handleQuickSearch('自然语言处理的最新进展', 'survey')}
+                  onClick={() => handleSend('自然语言处理的最新进展', 'survey')}
                   className="group text-left p-5 bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-purple-300 dark:hover:border-purple-700/50 hover:shadow-xl hover:shadow-purple-500/5 transition-all duration-300"
                 >
                   <div className="flex items-start gap-4">
@@ -316,6 +612,8 @@ function App() {
                   isLoading={false}
                   isStreaming={message.isStreaming}
                   streamingContent={message.streamingContent}
+                  readyForSearch={message.readyForSearch}
+                  onStartSearch={message.readyForSearch ? handleStartSearch : undefined}
                 />
               ))}
               {progressStage && (
@@ -370,6 +668,9 @@ function App() {
         mode={mode}
         onModeChange={setMode}
         placeholder={currentModeConfig.placeholder}
+        conversationPhase={conversationPhase}
+        onSkipToSearch={handleSkipToSearch}
+        pendingSearchQuery={pendingSearchQuery}
       />
     </div>
   );

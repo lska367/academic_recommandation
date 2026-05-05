@@ -15,6 +15,7 @@ from pdf_processor import PDFProcessor
 from multimodal_retrieval import MultimodalRetrieval
 from reranker import Reranker
 from report_generator import ReportGenerator
+from requirement_collector import RequirementCollector
 
 
 load_dotenv()
@@ -34,10 +35,11 @@ reranker = None
 report_generator = None
 crawler = None
 pdf_processor = None
+requirement_collector = None
 
 
 def init_services():
-    global retrieval, reranker, report_generator, crawler, pdf_processor
+    global retrieval, reranker, report_generator, crawler, pdf_processor, requirement_collector
     
     try:
         retrieval = MultimodalRetrieval()
@@ -68,6 +70,12 @@ def init_services():
         print("✅ PDFProcessor initialized")
     except Exception as e:
         print(f"⚠️  PDFProcessor initialization error: {e}")
+
+    try:
+        requirement_collector = RequirementCollector()
+        print("✅ RequirementCollector initialized")
+    except Exception as e:
+        print(f"⚠️  RequirementCollector initialization error: {e}")
 
 
 def ensure_sufficient_data(target_count: int = 50):
@@ -189,16 +197,19 @@ class SearchRequest(BaseModel):
     n_results: int = 10
     use_rerank: bool = True
     top_k: Optional[int] = None
+    requirement_summary: Optional[str] = None
 
 
 class ReportRequest(BaseModel):
     topic: str
     n_results: int = 15
+    requirement_summary: Optional[str] = None
 
 
 class ConversationRequest(BaseModel):
     messages: List[Dict[str, str]]
     use_context: bool = True
+    session_id: Optional[str] = None
 
 
 @app.get("/")
@@ -211,6 +222,7 @@ async def root():
             "search": "/api/search",
             "report": "/api/report",
             "conversation": "/api/conversation",
+            "conversation/stream": "/api/conversation/stream",
             "data/check": "/api/data/check",
             "index/stats": "/api/index/stats"
         }
@@ -285,78 +297,87 @@ async def generate_report(request: ReportRequest):
 
 @app.post("/api/conversation")
 async def conversation(request: ConversationRequest):
-    if not retrieval or not report_generator:
-        raise HTTPException(status_code=500, detail="Required services not initialized")
-    
+    if not requirement_collector:
+        raise HTTPException(status_code=500, detail="Requirement collector service not initialized")
+
     try:
         last_message = request.messages[-1] if request.messages else None
         if not last_message or last_message.get("role") != "user":
             raise HTTPException(status_code=400, detail="Last message must be from user")
-        
+
         user_query = last_message.get("content", "")
-        
-        search_results = []
-        if request.use_context:
-            search_results = retrieval.search(
-                query=user_query,
-                n_results=10
-            )
-        
-        context_text = ""
-        if search_results:
-            papers = {}
-            for result in search_results:
-                metadata = result.get("metadata", {})
-                paper_id = metadata.get("paper_id")
-                if paper_id not in papers:
-                    papers[paper_id] = {
-                        "title": metadata.get("title", ""),
-                        "authors": metadata.get("authors", ""),
-                        "summary": metadata.get("summary", ""),
-                        "chunks": []
-                    }
-                papers[paper_id]["chunks"].append(result.get("document", ""))
-            
-            context_text = "\n\n相关论文信息：\n"
-            for i, (paper_id, paper_info) in enumerate(papers.items(), 1):
-                context_text += f"\n[{i}] {paper_info['title']}\n"
-                context_text += f"    作者: {paper_info['authors']}\n"
-                context_text += f"    摘要: {paper_info['summary']}\n"
-                context_text += f"    关键内容: {' '.join(paper_info['chunks'][:2])}\n"
-        
-        conversation_history = "\n".join([
-            f"{msg.get('role', 'user')}: {msg.get('content', '')}"
-            for msg in request.messages[:-1]
-        ])
-        
-        prompt = f"""你是一位学术研究助手，请根据用户的问题提供专业、准确的回答。
 
-对话历史：
-{conversation_history}
+        session_id = request.session_id
+        if not session_id:
+            session_id = requirement_collector.create_session()
+        elif not requirement_collector.get_session(session_id):
+            raise HTTPException(status_code=404, detail="Session not found")
 
-{context_text}
-
-用户问题：{user_query}
-
-请根据上述信息回答用户的问题。如果提供了相关论文，请在回答中适当引用。回答要专业、清晰、有帮助。"""
-        
-        response = report_generator.client.chat.completions.create(
-            model=report_generator.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=2000
+        result = requirement_collector.generate_proactive_question(
+            session_id=session_id,
+            user_message=user_query
         )
-        
-        assistant_response = response.choices[0].message.content
-        
+
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to generate response"))
+
         return {
             "success": True,
-            "response": assistant_response,
-            "papers_used": len(search_results) if search_results else 0
+            "response": result["response"],
+            "session_id": session_id,
+            "round_count": result["round_count"],
+            "ready_for_search": result["ready_for_search"],
+            "requirement_summary": result["requirement_summary"],
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/conversation/stream")
+async def conversation_stream(request: ConversationRequest):
+    if not requirement_collector:
+        raise HTTPException(status_code=500, detail="Requirement collector service not initialized")
+
+    async def event_generator():
+        try:
+            last_message = request.messages[-1] if request.messages else None
+            if not last_message or last_message.get("role") != "user":
+                yield f"data: {json.dumps({'event': 'conversation_error', 'data': {'success': False, 'error': 'Last message must be from user'}}, ensure_ascii=False)}\n\n"
+                return
+
+            user_query = last_message.get("content", "")
+
+            session_id = request.session_id
+            if not session_id:
+                session_id = requirement_collector.create_session()
+            elif not requirement_collector.get_session(session_id):
+                yield f"data: {json.dumps({'event': 'conversation_error', 'data': {'success': False, 'error': 'Session not found'}}, ensure_ascii=False)}\n\n"
+                return
+
+            yield f"data: {json.dumps({'event': 'session_info', 'data': {'session_id': session_id}}, ensure_ascii=False)}\n\n"
+
+            for event_data in requirement_collector.generate_proactive_question_stream(
+                session_id=session_id,
+                user_message=user_query
+            ):
+                yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            print(f"Error in /api/conversation/stream: {type(e).__name__}: {e}")
+            yield f"data: {json.dumps({'event': 'conversation_error', 'data': {'success': False, 'error': str(e)}}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @app.get("/api/data/check")
@@ -466,8 +487,12 @@ async def search_with_progress(request: SearchRequest):
             })
 
         try:
+            search_query = request.query
+            if request.requirement_summary:
+                search_query = f"{request.query} {request.requirement_summary}"
+
             results = retrieval.search(
-                query=request.query,
+                query=search_query,
                 n_results=request.n_results,
                 progress_callback=progress_callback
             )
@@ -526,8 +551,12 @@ async def generate_report_with_progress(request: ReportRequest):
 
     async def event_generator():
         try:
+            search_query = request.topic
+            if request.requirement_summary:
+                search_query = f"{request.topic} {request.requirement_summary}"
+
             search_results = retrieval.search(
-                query=request.topic,
+                query=search_query,
                 n_results=request.n_results
             )
 

@@ -46,7 +46,7 @@ export const apiClient = {
     }
   },
 
-  searchPapersWithProgress(query, nResults = 10, useRerank = true, topK = null, onProgress = null) {
+  searchPapersWithProgress(query, nResults = 10, useRerank = true, topK = null, onProgress = null, requirementSummary = null) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       let buffer = '';
@@ -151,12 +151,16 @@ export const apiClient = {
         reject(new Error('请求已取消'));
       };
 
-      xhr.send(JSON.stringify({
+      const searchBody = {
         query,
         n_results: nResults,
         use_rerank: useRerank,
         top_k: topK,
-      }));
+      };
+      if (requirementSummary) {
+        searchBody.requirement_summary = requirementSummary;
+      }
+      xhr.send(JSON.stringify(searchBody));
     });
   },
 
@@ -202,7 +206,7 @@ export const apiClient = {
     }
   },
 
-  generateSurveyWithProgress(topic, nResults = 15, onProgress = null) {
+  generateSurveyWithProgress(topic, nResults = 15, onProgress = null, requirementSummary = null) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       let buffer = '';
@@ -316,7 +320,135 @@ export const apiClient = {
         reject(new Error('请求已取消'));
       };
 
-      xhr.send(JSON.stringify({ topic, n_results: nResults }));
+      const reportBody = { topic, n_results: nResults };
+      if (requirementSummary) {
+        reportBody.requirement_summary = requirementSummary;
+      }
+      xhr.send(JSON.stringify(reportBody));
+    });
+  },
+
+  conversationStream(messages, sessionId = null, onProgress = null) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      let buffer = '';
+      let isCompleted = false;
+
+      const cleanup = () => {
+        if (isCompleted) return;
+        isCompleted = true;
+      };
+
+      const processLine = (line) => {
+        if (!line.startsWith('data: ')) return;
+
+        try {
+          const jsonStr = line.slice(6).trim();
+          if (!jsonStr) return;
+
+          const data = JSON.parse(jsonStr);
+
+          if (data.event === 'conversation_error') {
+            cleanup();
+            reject(new Error(data.data?.error || '对话失败'));
+            return;
+          }
+
+          if (data.event === 'conversation_complete') {
+            cleanup();
+            resolve({
+              success: true,
+              response: data.data?.response || '',
+              round_count: data.data?.round_count || 0,
+              ready_for_search: data.data?.ready_for_search || false,
+              requirement_summary: data.data?.requirement_summary || '',
+              session_id: data.data?.session_id || '',
+            });
+            return;
+          }
+
+          if (onProgress && typeof onProgress === 'function') {
+            onProgress({
+              type: 'progress',
+              event: data.event,
+              stage: data.data?.stage,
+              content: data.data?.content,
+              fullContent: data.data?.full_content,
+              message: data.data?.message,
+              roundCount: data.data?.round_count,
+              sessionId: data.data?.session_id,
+            });
+          }
+        } catch (e) {
+          if (isDevelopment) {
+            console.warn('[SSE] Parse warning (may be incomplete):', e.message);
+          }
+        }
+      };
+
+      xhr.open('POST', `${API_BASE_URL}/api/conversation/stream`, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.responseType = 'text';
+
+      xhr.onprogress = (event) => {
+        if (isCompleted) return;
+
+        const newText = event.target.responseText;
+        if (!newText) return;
+
+        buffer = newText;
+
+        const lines = buffer.split('\n');
+        const completeLines = lines.slice(0, -1);
+
+        for (const line of completeLines) {
+          if (line.trim()) {
+            processLine(line.trim());
+          }
+          if (isCompleted) break;
+        }
+      };
+
+      xhr.onload = () => {
+        if (isCompleted) return;
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const remainingText = buffer;
+          if (remainingText.trim()) {
+            const lines = remainingText.split('\n');
+            for (const line of lines) {
+              if (line.trim()) {
+                processLine(line.trim());
+              }
+              if (isCompleted) break;
+            }
+          }
+
+          if (!isCompleted) {
+            cleanup();
+            reject(new Error('对话完成但未收到最终结果'));
+          }
+        } else {
+          cleanup();
+          reject(new Error(`请求失败: ${xhr.status}`));
+        }
+      };
+
+      xhr.onerror = () => {
+        cleanup();
+        reject(new Error('网络连接失败'));
+      };
+
+      xhr.onabort = () => {
+        cleanup();
+        reject(new Error('请求已取消'));
+      };
+
+      const body = { messages, use_context: false };
+      if (sessionId) {
+        body.session_id = sessionId;
+      }
+      xhr.send(JSON.stringify(body));
     });
   },
 

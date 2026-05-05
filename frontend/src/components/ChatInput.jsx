@@ -1,13 +1,13 @@
 
 import { useState, useCallback } from 'react';
-import { Send, Sparkles, Search } from 'lucide-react';
+import { Send, Sparkles, Search, SkipForward } from 'lucide-react';
 
 const MODE_CONFIG = {
   search: { icon: Search, label: '论文检索' },
   survey: { icon: Sparkles, label: '学术综述' },
 };
 
-export const ChatInput = ({ onSend, isLoading, mode, onModeChange, placeholder }) => {
+export const ChatInput = ({ onSend, isLoading, mode, onModeChange, placeholder, conversationPhase, onSkipToSearch, pendingSearchQuery }) => {
   const [input, setInput] = useState('');
 
   const handleSubmit = useCallback((e) => {
@@ -105,6 +105,18 @@ export const ChatInput = ({ onSend, isLoading, mode, onModeChange, placeholder }
               )}
             </button>
           </form>
+
+          {conversationPhase === 'collecting' && onSkipToSearch && (
+            <div className="flex justify-center">
+              <button
+                onClick={() => onSkipToSearch(pendingSearchQuery || '', mode)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-purple-600 dark:hover:text-purple-300 bg-slate-50 dark:bg-slate-800/50 hover:bg-purple-50 dark:hover:bg-purple-950/30 rounded-xl border border-slate-200 dark:border-slate-700/50 hover:border-purple-300 dark:hover:border-purple-600/50 transition-all duration-200"
+              >
+                <SkipForward size={16} />
+                跳过对话，直接检索
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

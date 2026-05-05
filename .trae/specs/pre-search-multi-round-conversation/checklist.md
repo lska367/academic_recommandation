@@ -1,0 +1,12 @@
+- [x] RequirementCollector 类实现，包含会话状态管理、主动询问生成、需求摘要提取
+- [x] 主动询问 prompt 设计合理，每轮追问侧重点不同（研究方向→技术方法→时间/场景偏好）
+- [x] `/api/conversation` 端点返回 round_count、ready_for_search、requirement_summary 字段
+- [x] `/api/conversation/stream` 流式对话端点正常工作
+- [x] `/api/search/stream` 和 `/api/report/stream` 支持 requirement_summary 参数
+- [x] 前端对话阶段状态管理正确（conversationPhase、sessionId、roundCount）
+- [x] 前端在需求收集阶段调用对话端点而非检索端点
+- [x] 三轮对话后前端显示"开始检索"按钮
+- [x] "开始检索"按钮点击后使用需求摘要触发检索
+- [x] 流式对话输出在前端实时显示
+- [x] 用户可在需求收集阶段提前触发检索（跳过对话）
+- [x] 端到端流程：首次输入→三轮追问→点击检索→显示结果，完整可用

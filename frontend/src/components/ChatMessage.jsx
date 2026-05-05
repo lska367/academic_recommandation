@@ -1,5 +1,5 @@
 
-import { User, Bot, FileText, User as UserIcon, ExternalLink } from 'lucide-react';
+import { User, Bot, FileText, User as UserIcon, ExternalLink, Search } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { memo, useEffect, useState } from 'react';
 
@@ -76,7 +76,7 @@ const TypingCursor = memo(() => (
 
 TypingCursor.displayName = 'TypingCursor';
 
-export const ChatMessage = memo(({ role, content, papers, isLoading, isStreaming, streamingContent }) => {
+export const ChatMessage = memo(({ role, content, papers, isLoading, isStreaming, streamingContent, readyForSearch, onStartSearch }) => {
   const isUser = role === 'user';
   const [displayedContent, setDisplayedContent] = useState('');
   const [showCursor, setShowCursor] = useState(false);
@@ -163,6 +163,18 @@ export const ChatMessage = memo(({ role, content, papers, isLoading, isStreaming
                       <PaperCard key={index} paper={paper} index={index} />
                     ))}
                   </div>
+                </div>
+              )}
+
+              {readyForSearch && !isUser && onStartSearch && (
+                <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/50">
+                  <button
+                    onClick={onStartSearch}
+                    className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 transition-all duration-200 shadow-lg shadow-purple-500/20 hover:shadow-xl hover:shadow-purple-500/30 active:scale-[0.98] font-semibold text-sm"
+                  >
+                    <Search size={18} />
+                    开始检索
+                  </button>
                 </div>
               )}
             </>
